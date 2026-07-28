@@ -1,0 +1,19 @@
+{
+  "name": "4-Day Plan",
+  "short_name": "4-Day",
+  "description": "Upper/lower workout tracker with rest timer and form checks",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1622",
+  "theme_color": "#0F1622",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
