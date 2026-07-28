@@ -241,6 +241,58 @@
         font-size:14px;font-weight:700;text-align:left;color:var(--gold);}
   .dbtn:active{background:var(--surface-hi);}
 
+  /* ---------- plans ---------- */
+  .plan{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+        padding:14px;margin-bottom:12px;}
+  .plan.on{border-color:var(--blue);}
+  .plan-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .plan-name{font-size:17px;font-weight:800;letter-spacing:-.01em;}
+  .plan-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+  .badge{flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+         color:var(--blue);border:1px solid var(--blue);border-radius:20px;padding:3px 9px;}
+  .badge.rec{color:var(--gold);border-color:var(--gold);}
+  .plan-acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;}
+  .pbtn{padding:8px 13px;border-radius:8px;background:var(--ink);border:1px solid var(--line);
+        font-size:13px;font-weight:700;color:var(--muted);}
+  .pbtn:active{background:var(--surface-hi);}
+  .pbtn.go{color:var(--blue);border-color:rgba(59,111,224,.5);}
+  .pbtn.del{color:var(--red);border-color:rgba(224,96,90,.35);}
+  .linkbox{padding:14px;background:var(--surface);font-size:12px;line-height:1.6;color:var(--gold);
+           word-break:break-all;user-select:all;-webkit-user-select:all;}
+
+  /* ---------- plan editor ---------- */
+  .back.save{color:var(--blue);padding:6px 0 6px 8px;}
+  .edtabs{flex-wrap:wrap;}
+  .edtabs .tab{flex:0 1 auto;min-width:70px;text-transform:none;letter-spacing:0;font-size:13px;}
+  .edtabs .tab.add{flex:0 0 44px;min-width:0;font-size:18px;}
+  .ed-in{width:100%;background:var(--ink);border:1px solid var(--line);border-radius:10px;
+         padding:12px;font-size:15px;color:var(--text);font-family:inherit;}
+  .ed-in.big{font-size:17px;font-weight:700;}
+  .ed-sess{display:flex;gap:10px;margin-bottom:18px;}
+  .ed-sess .field .eyebrow{text-align:left;}
+  .ed-ex{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+         padding:12px;margin-bottom:12px;}
+  .ed-head{display:flex;align-items:center;gap:7px;}
+  .ed-n{flex-shrink:0;width:24px;height:24px;border-radius:6px;background:var(--surface-hi);
+        font-size:12px;font-weight:800;color:var(--muted);display:flex;align-items:center;justify-content:center;}
+  .ed-name{flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:9px;
+           padding:10px;font-size:15px;font-weight:700;color:var(--text);font-family:inherit;}
+  .ed-ic{flex-shrink:0;width:30px;height:36px;font-size:15px;color:var(--muted);}
+  .ed-ic:disabled{opacity:.25;}
+  .ed-ic.del{color:var(--red);}
+  .ed-grid{display:flex;gap:8px;margin-top:12px;}
+  .ed-grid .field .eyebrow{text-align:left;}
+  .ed-grid .ed-in{padding:0 8px;height:52px;text-align:center;}
+  /* three steppers to a row leaves no space for a 3-digit rest at the
+     session-screen button size, so shrink them here only */
+  .ed-grid .stepper button{width:30px;font-size:18px;}
+  .ed-grid .stepper input{font-size:17px;}
+  .ed-grid .field:nth-child(2){flex:.8;}
+  .ed-ex details.form{margin-top:12px;}
+  .ed-ex .form-body .field{margin-bottom:12px;}
+  .ed-ex .form-body .eyebrow{text-align:left;}
+  .cell.full{background:var(--surface-hi);}
+
   @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important;}}
 </style>
 
@@ -254,8 +306,13 @@ const WARMUP = {
   upper:["Arm circles — 5 each direction","Band pull-aparts — 10 reps","Band over-and-backs — 5 reps",
          "First exercise only: 50% weight × 8, then 70% × 4"],
   lower:["Forward leg swings — 5 per side","Side leg swings — 5 per side","Bodyweight deep squat hold — 30 seconds",
-         "First exercise only: 50% weight × 8, then 70% × 4"]
+         "First exercise only: 50% weight × 8, then 70% × 4"],
+  /* for custom sessions that aren't cleanly upper or lower */
+  full:["Arm circles — 5 each direction","Forward leg swings — 5 per side",
+        "Bodyweight deep squat hold — 30 seconds",
+        "First exercise only: 50% weight × 8, then 70% × 4"]
 };
+const KINDS = ["upper","lower","full"];
 
 const SESSIONS = {
   upperA:{ name:"Upper A", kind:"upper", ex:[
@@ -345,13 +402,40 @@ const LINKS = {
   "Bulgarian Split Squat":"r9XtxWSTlcg", "Weighted Step-Ups":"Cjc3AgmdtlA"
 };
 
-function linkFor(n){
-  const id = LINKS[n];
+/* A video id reaches an href. Shared plans carry user-typed ids, so anything
+   that isn't a literal YouTube id is discarded rather than trusted — otherwise
+   "javascript:..." lands straight in the link. */
+const VID_RE = /^[A-Za-z0-9_-]{11}$/;
+const okVid = v => typeof v === "string" && VID_RE.test(v) ? v : null;
+
+function linkFor(n, vid){
+  const id = okVid(vid) || LINKS[n];
   return id
     ? { url:"https://youtu.be/"+id, label:"Watch demo", vetted:true }
     : { url:"https://www.youtube.com/results?search_query="+encodeURIComponent(n+" proper form technique"),
         label:"Find a demo", vetted:false };
 }
+
+/* ============================================================
+   PLANS
+   The program above is the built-in "Recommended" plan. It is never written
+   to storage, so a future deploy can improve it and it costs nothing in the
+   single state blob. state.plans holds only user-authored plans.
+   ============================================================ */
+const BUILTIN = { id:"builtin", name:"4-Day Upper/Lower", order:ORDER, sessions:SESSIONS };
+
+const plan      = () => state.plans[state.planId] || BUILTIN;
+const sess      = id => plan().sessions[id];
+const order     = () => plan().order;
+const allPlans  = () => [BUILTIN, ...Object.values(state.plans)];
+const planById  = id => (id==="builtin" ? BUILTIN : state.plans[id]) || null;
+const isBuiltin = () => plan().id === "builtin";
+
+const exCount = p => p.order.reduce((n,s)=> n + (p.sessions[s] ? p.sessions[s].ex.length : 0), 0);
+
+/* ids only have to be unique inside this device's plan map */
+let idSeq = 0;
+const newId = pre => pre + Math.random().toString(36).slice(2,8) + (idSeq++).toString(36);
 
 /* ============================================================
    STATE
@@ -438,7 +522,8 @@ async function initStore(){
   }
 }
 
-let state = { view:"home", session:null, idx:0, units:"lb", live:{}, log:[] };
+let state = { v:2, view:"home", session:null, idx:0, units:"lb",
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -448,9 +533,39 @@ async function load(){
     const raw = await storeGet(KEY);
     if(raw) Object.assign(state, JSON.parse(raw));
   }catch(e){}
-  let dirty=false;
+  let dirty = migrate();
   state.log.forEach(r=>{ if(!r.id){ r.id = mkId(r); dirty=true; } });
   if(dirty) save();
+}
+
+/* v1 stored a single hardcoded program. Same storage key, so no history is
+   lost — the old shape just gets the plan fields it never had. */
+function migrate(){
+  if(state.v === 2 && state.plans) return false;
+  state.plans  = state.plans  || {};
+  state.planId = state.planId || "builtin";
+  state.draft  = state.draft  || null;
+
+  /* live keys gained a plan segment, or a duplicated plan would share a
+     scratchpad with its original */
+  const live = {};
+  Object.entries(state.live || {}).forEach(([k,v])=>{
+    live[k.split(":").length === 2 ? "builtin:"+k : k] = v;
+  });
+  state.live = live;
+
+  /* records must carry their own kind — the plan they came from can be
+     deleted later, and history still has to render */
+  state.log.forEach(r=>{
+    if(!r.planId) r.planId = "builtin";
+    if(!r.kind){
+      const s = BUILTIN.sessions[r.session];
+      if(s) r.kind = s.kind;
+    }
+  });
+
+  state.v = 2;
+  return true;
 }
 
 /* writes are chained so rapid taps can't land out of order */
@@ -460,15 +575,24 @@ function save(){
   return writeChain;
 }
 
+/* typing in the plan editor would otherwise serialise the whole state on
+   every keystroke */
+let saveTimer = null;
+function saveSoon(){ clearTimeout(saveTimer); saveTimer = setTimeout(save, 400); }
+
 const mkId = r => (r.day || String(r.date).slice(0,10)) + "-" + r.session + "-" +
                   String(r.date).slice(11,19).replace(/:/g,"");
 
-const lk = (s,i) => s+":"+i;
+/* scoped by plan — two plans can hold the same session id, and a duplicated
+   plan must not inherit the original's half-finished sets */
+const lk = (s,i) => state.planId+":"+s+":"+i;
 const liveSets = (s,i) => state.live[lk(s,i)] || [];
 
 function sessionProgress(s){
   let total=0, got=0;
-  SESSIONS[s].ex.forEach((e,i)=>{ total+=e.sets; got+=liveSets(s,i).length; });
+  const S = sess(s);
+  if(!S) return { got:0, total:0, pct:0 };
+  S.ex.forEach((e,i)=>{ total+=e.sets; got+=liveSets(s,i).length; });
   return { got, total, pct: total ? got/total : 0 };
 }
 
@@ -552,6 +676,12 @@ const setStr  = sets => sets.map(x => x.w ? x.w+"×"+x.r : "BW×"+x.r).join("  "
    correct even if the user later opens the app in another time zone */
 const recDay = r => r.day || T.dayOf(r.date, r.zone);
 
+/* Read the kind off the record, never off the plan — the plan it came from
+   may since have been deleted, and the calendar still has to paint. */
+const recKind = r => r.kind
+  || (BUILTIN.sessions[r.session] && BUILTIN.sessions[r.session].kind)
+  || "full";
+
 function logsByDay(){
   const map={};
   state.log.forEach(r=>{ const k=recDay(r); (map[k]=map[k]||[]).push(r); });
@@ -613,11 +743,13 @@ function download(name, text, mime){
 }
 
 function exportJSON(){
-  if(!state.log.length){ alert("Nothing logged yet."); return; }
+  const mine = Object.values(state.plans);
+  if(!state.log.length && !mine.length){ alert("Nothing logged or created yet."); return; }
   const payload = JSON.stringify({
-    format:"4dayplan-log", version:1,
+    format:"4dayplan-log", version:2,
     exported:new Date().toISOString(), zone:T.zone(),
-    units:state.units, log:state.log
+    units:state.units, log:state.log,
+    plans: mine.map(packPlan)      // backup path; links are the sharing path
   }, null, 2);
   const stamp = T.today();
   if(!download("workout-log-"+stamp+".json", payload, "application/json"))
@@ -635,7 +767,9 @@ function mergeLog(incoming){
   const seen = new Set(state.log.map(r=>r.id || mkId(r)));
   let added=0, dupes=0, bad=0;
   incoming.forEach(r=>{
-    if(!r || !r.date || !r.session || !r.entries || !SESSIONS[r.session]){ bad++; return; }
+    /* deliberately does NOT require the session to exist locally — a log
+       exported from someone else's plan is still valid history */
+    if(!r || !r.date || !r.session || !r.entries || typeof r.entries !== "object"){ bad++; return; }
     const id = r.id || mkId(r);
     if(seen.has(id)){ dupes++; return; }
     seen.add(id);
@@ -652,14 +786,25 @@ function importJSON(file){
     try{ data = JSON.parse(txt); }
     catch(e){ alert("That file isn't valid JSON."); return; }
     const list = Array.isArray(data) ? data : data.log;
-    if(!Array.isArray(list)){ alert("No workout log found in that file."); return; }
+    const incoming = Array.isArray(data.plans) ? data.plans : [];
+    if(!Array.isArray(list) && !incoming.length){ alert("No workout log or plans found in that file."); return; }
     if(data.format && data.format!=="4dayplan-log"){
       if(!confirm("That file wasn't exported by this app. Try importing anyway?")) return;
     }
-    const r = mergeLog(list);
+    const r = Array.isArray(list) ? mergeLog(list) : { added:0, dupes:0, bad:0 };
+
+    /* same validation as a shared link — a file is no more trustworthy */
+    let plans = 0;
+    incoming.forEach(raw=>{
+      const p = unpackPlan(raw);
+      if(!p) return;
+      state.plans[p.id] = p; plans++;
+    });
+
     save();
     state.view="history"; state.tab="list"; render();
     alert("Imported "+r.added+" workout"+(r.added===1?"":"s")+"."
+      + (plans     ? "\nAdded "+plans+" plan"+(plans===1?"":"s")+"." : "")
       + (r.dupes ? "\nSkipped "+r.dupes+" already on this device." : "")
       + (r.bad   ? "\nSkipped "+r.bad+" unreadable entries." : ""));
   };
@@ -673,6 +818,319 @@ function pickImport(){
   inp.onchange = () => { if(inp.files && inp.files[0]) importJSON(inp.files[0]); };
   inp.click();
 }
+
+/* ============================================================
+   SHARE — a whole plan as a link
+
+   The payload rides in the hash, not the query string, for two reasons:
+   GitHub Pages never receives it (no 404, nothing in server logs), and the
+   service worker's cache-first match ignores the hash, so a shared link
+   still opens offline.
+
+   Measured: a 4-session x 5-exercise plan with every coaching field filled
+   is ~6.5 KB of JSON, 384 B deflated, a 560-character URL.
+   ============================================================ */
+const S_MAX = 14, E_MAX = 50, TXT_MAX = 400, NAME_MAX = 60;
+
+const clampS = (v,max) => typeof v === "string" ? v.slice(0,max) : "";
+const clampN = (v,lo,hi,dflt) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+};
+
+/* short keys keep the uncompressed fallback viable on browsers without
+   CompressionStream — deflate barely cares, but that path has no help */
+function packPlan(p){
+  const s = {};
+  p.order.forEach(id=>{
+    const S = p.sessions[id];
+    if(!S) return;
+    s[id] = { n:S.name, k:S.kind, e:S.ex.map(e=>{
+      const o = { n:e.name, x:e.sets, r:e.reps, l:e.lo, t:e.rest };
+      if(e.alt)    o.a  = e.alt;
+      if(e.altVid) o.av = e.altVid;
+      if(e.ok)     o.ok = e.ok;
+      if(e.no)     o.no = e.no;
+      if(e.cue)    o.c  = e.cue;
+      if(e.warn)   o.w  = e.warn;
+      if(e.vid)    o.v  = e.vid;
+      return o;
+    })};
+  });
+  return { f:"wq", v:1, n:p.name, o:p.order.filter(id=>p.sessions[id]), s };
+}
+
+/* Everything here arrives from someone else's phone, so nothing is trusted:
+   types checked, kinds whitelisted, numbers clamped, strings truncated,
+   counts capped, and a fresh id minted so an import can never overwrite a
+   plan already on this device. */
+function unpackPlan(d){
+  if(!d || typeof d !== "object" || d.f !== "wq") return null;
+  if(!Array.isArray(d.o) || !d.s || typeof d.s !== "object") return null;
+
+  const sessions = {}, ord = [];
+  d.o.slice(0, S_MAX).forEach(id=>{
+    if(typeof id !== "string") return;
+    const S = d.s[id];
+    if(!S || typeof S !== "object" || !Array.isArray(S.e)) return;
+
+    const ex = [];
+    S.e.slice(0, E_MAX).forEach(e=>{
+      if(!e || typeof e !== "object") return;
+      const name = clampS(e.n, NAME_MAX).trim();
+      if(!name) return;
+      const o = {
+        name,
+        sets: clampN(e.x, 1, 20, 3),
+        reps: clampS(e.r, 24).trim() || "8–12",
+        lo:   clampN(e.l, 1, 100, 8),
+        rest: clampN(e.t, 0, 600, 90)
+      };
+      const alt=clampS(e.a,TXT_MAX), av=clampS(e.av,NAME_MAX), ok=clampS(e.ok,TXT_MAX),
+            no=clampS(e.no,TXT_MAX), cue=clampS(e.c,TXT_MAX), warn=clampS(e.w,TXT_MAX),
+            vid=okVid(e.v);
+      if(alt) o.alt=alt;   if(av) o.altVid=av;  if(ok) o.ok=ok;
+      if(no)  o.no=no;     if(cue) o.cue=cue;   if(warn) o.warn=warn;
+      if(vid) o.vid=vid;
+      ex.push(o);
+    });
+    if(!ex.length) return;
+
+    /* session ids are internal and end up in data-* attributes — mint fresh
+       ones rather than trust an object key that came from a link */
+    const sid = newId("s");
+    sessions[sid] = {
+      name: clampS(S.n, NAME_MAX).trim() || "Session",
+      kind: KINDS.includes(S.k) ? S.k : "full",
+      ex
+    };
+    ord.push(sid);
+  });
+
+  if(!ord.length) return null;
+  return { id:newId("p"), name: clampS(d.n, NAME_MAX).trim() || "Shared plan", order:ord, sessions };
+}
+
+/* base64url over bytes. Always via TextEncoder — bare btoa() on a string
+   throws the moment a plan name contains a non-Latin-1 character. */
+const B64 = {
+  enc(bytes){
+    let s = "";
+    for(let i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  },
+  dec(str){
+    const s = atob(str.replace(/-/g,"+").replace(/_/g,"/"));
+    const out = new Uint8Array(s.length);
+    for(let i=0;i<s.length;i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+};
+
+async function encPlan(p){
+  const raw = new TextEncoder().encode(JSON.stringify(packPlan(p)));
+  if(typeof CompressionStream !== "undefined"){
+    try{
+      const cs = new CompressionStream("deflate-raw");
+      const w = cs.writable.getWriter();
+      /* the writer's own promises reject separately from the read side —
+         unhandled, a damaged payload becomes an uncaught rejection */
+      w.write(raw).catch(()=>{}); w.close().catch(()=>{});
+      return "z" + B64.enc(new Uint8Array(await new Response(cs.readable).arrayBuffer()));
+    }catch(e){}
+  }
+  return "j" + B64.enc(raw);
+}
+
+async function decPlan(code){
+  try{
+    const body = B64.dec(code.slice(1));
+    let bytes = body;
+    if(code[0] === "z"){
+      if(typeof DecompressionStream === "undefined") return null;
+      const ds = new DecompressionStream("deflate-raw");
+      const w = ds.writable.getWriter();
+      w.write(body).catch(()=>{}); w.close().catch(()=>{});
+      bytes = new Uint8Array(await new Response(ds.readable).arrayBuffer());
+    } else if(code[0] !== "j") return null;
+    return unpackPlan(JSON.parse(new TextDecoder().decode(bytes)));
+  }catch(e){ return null; }
+}
+
+const planURL = async p => location.origin + location.pathname + "#p=" + await encPlan(p);
+const shareCode = () => { const m = /[#&]p=([A-Za-z0-9_-]+)/.exec(location.hash); return m ? m[1] : null; };
+const clearHash = () => { try{ window.history.replaceState(null,"",location.pathname+location.search); }catch(e){} };
+
+async function sharePlan(id){
+  const p = planById(id);
+  if(!p) return;
+  let url;
+  try{ url = await planURL(p); }
+  catch(e){ alert("Couldn't build a link for that plan."); return; }
+
+  if(navigator.share){
+    try{ await navigator.share({ title:p.name, text:"Workout plan: "+p.name, url }); return; }
+    catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  try{
+    await navigator.clipboard.writeText(url);
+    alert("Link copied.\n\nAnyone who opens it can save this plan to their own device.");
+    return;
+  }catch(e){}
+  /* last resort — no share sheet, no clipboard permission */
+  state.shareUrl = url; save(); render();
+}
+
+/* ============================================================
+   PLAN ACTIONS
+   ============================================================ */
+function usePlan(id){
+  if(!planById(id)) return;
+  state.planId = id; state.view="home"; state.session=null; state.idx=0;
+  sheet=null; stopRest(); save(); render();
+}
+
+const blankEx = () => ({ name:"", sets:3, reps:"8–12", lo:8, rest:90 });
+const blankSession = n => ({ name:n||"Day 1", kind:"full", ex:[blankEx()] });
+
+function startDraft(p, srcId){
+  const d = p ? JSON.parse(JSON.stringify(p)) : null;
+  const sid = newId("s");
+  state.draft = d
+    ? { ...d, srcId: srcId || null, tab: d.order[0] }
+    : { id:newId("p"), name:"", order:[sid], sessions:{ [sid]:blankSession() }, srcId:null, tab:sid };
+  state.view="editor"; save(); window.scrollTo(0,0); render();
+}
+
+function newPlan(){ startDraft(null); }
+function editPlan(id){ const p=planById(id); if(p && p.id!=="builtin") startDraft(p, id); }
+
+function dupPlan(id){
+  const p = planById(id);
+  if(!p) return;
+  const c = JSON.parse(JSON.stringify(p));
+  c.id = newId("p");
+  c.name = (p.name + " copy").slice(0, NAME_MAX);
+  startDraft(c, null);
+}
+
+function delPlan(id){
+  const p = state.plans[id];
+  if(!p) return;
+  if(!confirm("Delete \""+p.name+"\"?\n\nWorkouts you already saved from it stay in your history.")) return;
+  delete state.plans[id];
+  Object.keys(state.live).forEach(k=>{ if(k.startsWith(id+":")) delete state.live[k]; });
+  if(state.planId === id){ state.planId = "builtin"; state.session=null; state.idx=0; }
+  save(); render();
+}
+
+function saveDraft(){
+  const d = state.draft;
+  if(!d) return;
+  const name = (d.name||"").trim();
+  if(!name){ alert("Give the plan a name first."); return; }
+
+  const sessions = {}, ord = [];
+  d.order.forEach(sid=>{
+    const S = d.sessions[sid];
+    if(!S) return;
+    const ex = S.ex.filter(e => (e.name||"").trim());
+    if(!ex.length) return;
+    sessions[sid] = {
+      name:(S.name||"").trim() || "Session",
+      kind: KINDS.includes(S.kind) ? S.kind : "full",
+      ex: ex.map(e=>{
+        const o = { name:e.name.trim(), sets:clampN(e.sets,1,20,3),
+                    reps:(e.reps||"").trim() || "8–12",
+                    lo:clampN(e.lo,1,100,8), rest:clampN(e.rest,0,600,90) };
+        ["alt","altVid","ok","no","cue","warn"].forEach(f=>{
+          const v = (e[f]||"").trim(); if(v) o[f] = v.slice(0,TXT_MAX);
+        });
+        const vid = okVid((e.vid||"").trim()); if(vid) o.vid = vid;
+        return o;
+      })
+    };
+    ord.push(sid);
+  });
+
+  if(!ord.length){ alert("Add at least one session with a named exercise."); return; }
+
+  state.plans[d.id] = { id:d.id, name:name.slice(0,NAME_MAX), order:ord, sessions };
+  state.draft = null;
+  state.view = "plans";
+  save(); render();
+}
+
+function cancelDraft(){
+  if(state.draft && !confirm("Discard changes to this plan?")) return;
+  state.draft = null; state.view="plans"; save(); render();
+}
+
+/* structural edits re-render; field edits deliberately do not (see wire) */
+function edAddEx(){ state.draft.sessions[state.draft.tab].ex.push(blankEx()); save(); render(); }
+function edDelEx(i){
+  const S = state.draft.sessions[state.draft.tab];
+  S.ex.splice(i,1);
+  if(!S.ex.length) S.ex.push(blankEx());
+  save(); render();
+}
+function edMoveEx(i,d){
+  const ex = state.draft.sessions[state.draft.tab].ex, j = i+d;
+  if(j<0 || j>=ex.length) return;
+  [ex[i], ex[j]] = [ex[j], ex[i]];
+  save(); render();
+}
+function edAddSession(){
+  const d = state.draft;
+  if(d.order.length >= S_MAX){ alert("That's the most sessions a plan can hold."); return; }
+  const sid = newId("s");
+  d.sessions[sid] = blankSession("Day "+(d.order.length+1));
+  d.order.push(sid); d.tab = sid;
+  save(); render();
+}
+function edDelSession(){
+  const d = state.draft;
+  if(d.order.length <= 1){ alert("A plan needs at least one session."); return; }
+  if(!confirm("Remove this session from the plan?")) return;
+  delete d.sessions[d.tab];
+  d.order = d.order.filter(x => x !== d.tab);
+  d.tab = d.order[0];
+  save(); render();
+}
+
+/* ============================================================
+   SHARED-LINK IMPORT
+   ============================================================ */
+async function checkShareLink(){
+  const code = shareCode();
+  if(!code) return false;
+  clearHash();
+  const p = await decPlan(code);
+  if(!p){ alert("That plan link is damaged or from a newer version of the app."); return false; }
+  state.pending = p; state.view = "import";
+  return true;
+}
+
+/* for when a link arrives as text rather than as a tap — e.g. copied out of
+   a chat the browser won't hand off */
+async function pasteLink(){
+  const txt = prompt("Paste the plan link:");
+  if(!txt) return;
+  const m = /[#&]p=([A-Za-z0-9_-]+)/.exec(txt.trim());
+  if(!m){ alert("That doesn't look like a plan link."); return; }
+  const p = await decPlan(m[1]);
+  if(!p){ alert("That plan link is damaged or from a newer version of the app."); return; }
+  state.pending = p; state.view="import"; save(); render();
+}
+
+function acceptShared(){
+  const p = state.pending;
+  if(!p) return;
+  state.plans[p.id] = { id:p.id, name:p.name, order:p.order, sessions:p.sessions };
+  state.pending = null; state.view = "plans";
+  save(); render();
+}
+function rejectShared(){ state.pending=null; state.view="home"; save(); render(); }
 
 /* ============================================================
    REST TIMER
@@ -716,11 +1174,18 @@ function openSession(s){
   state.view="session"; state.session=s; state.idx=0; sheet=null;
   save(); keepAwake(); render();
 }
-function home(){ state.view="home"; state.session=null; sheet=null; stopRest(); save(); render(); }
-function history(){ state.view="history"; sheet=null; state.calOff=0; state.selDay=null; save(); render(); }
+function home(){
+  state.view="home"; state.session=null; sheet=null;
+  state.pending=null; state.shareUrl=null;
+  stopRest(); save(); render();
+}
+function plansView(){ state.view="plans"; sheet=null; state.shareUrl=null; save(); render(); }
+/* named histView, not history — a top-level `function history()` would
+   shadow the browser History object that clearHash() needs */
+function histView(){ state.view="history"; sheet=null; state.calOff=0; state.selDay=null; save(); render(); }
 
 function openSheet(n){
-  const s=state.session, i=state.idx-1, ex=SESSIONS[s].ex[i];
+  const s=state.session, i=state.idx-1, ex=sess(s).ex[i];
   const cur = liveSets(s,i);
   const existing = cur[n-1];
   let w, r;
@@ -736,7 +1201,7 @@ function openSheet(n){
 }
 
 function logSet(){
-  const s=state.session, i=state.idx-1, ex=SESSIONS[s].ex[i], k=lk(s,i);
+  const s=state.session, i=state.idx-1, ex=sess(s).ex[i], k=lk(s,i);
   const arr = [...liveSets(s,i)];
   arr[sheet.set-1] = { w:sheet.w, r:sheet.r };
   for(let j=0;j<arr.length;j++) if(!arr[j]) arr[j] = { w:sheet.w, r:sheet.r };
@@ -757,9 +1222,9 @@ function clearSet(n){
 }
 
 function saveWorkout(){
-  const s=state.session;
+  const s=state.session, S=sess(s);
   const entries={};
-  SESSIONS[s].ex.forEach((e,i)=>{ const v=liveSets(s,i); if(v.length) entries[e.name]=v; });
+  S.ex.forEach((e,i)=>{ const v=liveSets(s,i); if(v.length) entries[e.name]=v; });
   if(!Object.keys(entries).length){ home(); return; }
   const now = new Date().toISOString();
   state.log.push({
@@ -767,14 +1232,18 @@ function saveWorkout(){
     date: now,
     day: T.today(),         // calendar date where the user was standing
     zone: T.zone(),         // IANA zone, so it stays right if they travel
-    session:s, name:SESSIONS[s].name, entries
+    session:s, name:S.name,
+    planId: state.planId,
+    kind: S.kind,           // carried, because the plan can be deleted later
+                            // and history still has to render
+    entries
   });
-  SESSIONS[s].ex.forEach((_,i)=> delete state.live[lk(s,i)]);
+  S.ex.forEach((_,i)=> delete state.live[lk(s,i)]);
   state.view="home"; state.session=null; save(); render();
 }
 
 function go(d){
-  const max = SESSIONS[state.session].ex.length + 1;
+  const max = sess(state.session).ex.length + 1;
   state.idx = Math.max(0, Math.min(max, state.idx+d));
   sheet=null; save(); window.scrollTo(0,0); render();
 }
@@ -789,33 +1258,42 @@ function wipe(){
    RENDER
    ============================================================ */
 const esc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+/* esc() alone is not enough inside an attribute — it leaves quotes intact, so
+   an exercise named  5" curl  would break out of value="...". */
+const escA = t => esc(t).replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 function render(){
   const app = document.getElementById("app");
   if(timer.id !== null){ app.innerHTML = viewRest(); wire(); return; }
   app.innerHTML = state.view==="history" ? viewHistory()
                 : state.view==="session" ? viewSession()
+                : state.view==="plans"   ? viewPlans()
+                : state.view==="editor"  ? viewEditor()
+                : state.view==="import"  ? viewImport()
                 : viewHome();
   wire();
 }
 
 function viewHome(){
-  const inProg = ORDER.find(s => { const p=sessionProgress(s); return p.got>0 && p.got<p.total; });
+  const P = plan();
+  const inProg = order().find(s => { const p=sessionProgress(s); return p.got>0 && p.got<p.total; });
   let resume="";
   if(inProg){
     const p=sessionProgress(inProg);
-    resume = `<button class="resume" data-open="${inProg}">
+    resume = `<button class="resume" data-open="${escA(inProg)}">
       <div class="eyebrow">Pick up where you left off</div>
-      <div class="resume-name">${SESSIONS[inProg].name}</div>
+      <div class="resume-name">${esc(sess(inProg).name)}</div>
       <div class="resume-meta">${p.got} of ${p.total} sets logged</div></button>`;
   }
 
-  const cards = ORDER.map(s=>{
+  const cards = order().map(s=>{
+    const S = sess(s);
+    if(!S) return "";
     const p=sessionProgress(s);
-    const prev = state.log.filter(x=>x.session===s).pop();
-    return `<button class="day" data-open="${s}">
+    const prev = state.log.filter(x=>x.session===s && x.planId===state.planId).pop();
+    return `<button class="day" data-open="${escA(s)}">
       <div>
-        <div class="day-name">${SESSIONS[s].name.replace(" ","<br>")}</div>
+        <div class="day-name">${esc(S.name).replace(" ","<br>")}</div>
         <div class="day-meta">${prev ? "Last: "+T.fmtDay(recDay(prev)) : "Not logged yet"}</div>
       </div>
       <div class="day-bar"><i style="width:${Math.round(p.pct*100)}%"></i></div></button>`;
@@ -825,20 +1303,179 @@ function viewHome(){
   const today = T.today();
   const week = state.log.filter(x => T.daysBetween(recDay(x), today) < 7).length;
 
+  const sub = isBuiltin()
+    ? "Mon Upper A · Tue Lower A · Thu Upper B · Fri Lower B"
+    : P.order.length+" session"+(P.order.length>1?"s":"")+" · "+exCount(P)+" exercises";
+
   return `<div class="wrap">
     <div class="home-head">
-      <div class="eyebrow">Upper / Lower · 30 min</div>
-      <h1 class="display">4-Day Plan</h1>
-      <div class="home-sub">Mon Upper A · Tue Lower A · Thu Upper B · Fri Lower B</div>
+      <div class="eyebrow">${isBuiltin() ? "Recommended · 30 min" : "Your plan"}</div>
+      <h1 class="display">${esc(P.name)}</h1>
+      <div class="home-sub">${esc(sub)}</div>
       ${n ? `<div class="streak">${n} workout${n>1?"s":""} logged · ${week} this week</div>` : ""}
     </div>
     ${resume}
     <div class="grid">${cards}</div>
     <div class="note"><b>Stop every set with 2–3 reps left in the tank.</b> If you could have done 3 more
       with good form, that's the right place to stop.</div>
+    <button class="ghost" id="plans">Plans — switch, create or share</button>
     <button class="ghost" id="hist">View history (${n})</button>
     <button class="ghost" id="units">Units: ${state.units.toUpperCase()} — tap to switch</button>
   </div>`;
+}
+
+/* ============================================================
+   PLAN VIEWS
+   ============================================================ */
+function planChrome(title, inner, backId){
+  return `<div class="topbar"><div class="topbar-row">
+      <button class="back" id="${backId||"back2"}">← Back</button><div class="counter">${esc(title)}</div>
+    </div><div class="steps"></div></div>
+    <div class="wrap">${inner}</div>`;
+}
+
+function viewPlans(){
+  const cards = allPlans().map(p=>{
+    const on  = p.id === state.planId;
+    const own = p.id !== "builtin";
+    const acts = [
+      on ? "" : `<button class="pbtn go" data-use="${escA(p.id)}">Use</button>`,
+      `<button class="pbtn" data-share="${escA(p.id)}">Share</button>`,
+      own ? `<button class="pbtn" data-edit="${escA(p.id)}">Edit</button>` : "",
+      `<button class="pbtn" data-dup="${escA(p.id)}">Duplicate</button>`,
+      own ? `<button class="pbtn del" data-del="${escA(p.id)}">Delete</button>` : ""
+    ].join("");
+    return `<div class="plan ${on?"on":""}">
+      <div class="plan-top">
+        <div>
+          <div class="plan-name">${esc(p.name)}</div>
+          <div class="plan-meta">${p.order.length} session${p.order.length>1?"s":""} · ${exCount(p)} exercises</div>
+        </div>
+        ${on ? `<span class="badge">Active</span>` : (own ? "" : `<span class="badge rec">Recommended</span>`)}
+      </div>
+      <div class="plan-acts">${acts}</div>
+    </div>`;
+  }).join("");
+
+  const link = state.shareUrl ? `<div class="data">
+      <div class="data-head">Copy this link</div>
+      <div class="linkbox">${esc(state.shareUrl)}</div>
+    </div>
+    <div class="ics-note">Your browser blocked the share sheet and the clipboard, so here's the raw
+      link — press and hold to select it.</div>` : "";
+
+  return planChrome("PLANS", `
+    ${cards}
+    ${link}
+    <button class="ghost" id="newPlan">+ Create a plan</button>
+    <button class="ghost" id="impLink">Paste a shared link</button>
+    <div class="ics-note">The recommended plan can't be edited, but you can duplicate it and change
+      the copy. Sharing builds a link that saves the plan on whoever opens it — it never touches
+      their history.</div>`);
+}
+
+function viewImport(){
+  const p = state.pending;
+  if(!p){ state.view="home"; return viewHome(); }
+  const rows = p.order.map(sid=>{
+    const S = p.sessions[sid];
+    return `<div class="srow"><span class="nm">${esc(S.name)}</span>
+      <span class="vv">${S.ex.length} exercise${S.ex.length>1?"s":""}</span></div>`;
+  }).join("");
+  return planChrome("SHARED PLAN", `
+    <div class="home-head">
+      <div class="eyebrow">Someone shared a plan</div>
+      <h1 class="display">${esc(p.name)}</h1>
+      <div class="home-sub">${p.order.length} session${p.order.length>1?"s":""} · ${exCount(p)} exercises</div>
+    </div>
+    <div class="summary">${rows}</div>
+    <button class="save-btn" id="impYes">Save this plan</button>
+    <button class="ghost" id="impNo">No thanks</button>
+    <div class="ics-note">Saving adds it alongside your other plans. Nothing you've already logged
+      is changed.</div>`, "impNo");
+}
+
+/* The text inputs here never trigger render() on keystroke — see wire().
+   A full re-render mid-word would drop the caret. */
+function viewEditor(){
+  const d = state.draft;
+  if(!d){ state.view="plans"; return viewPlans(); }
+  if(!d.sessions[d.tab]) d.tab = d.order[0];
+  const S = d.sessions[d.tab];
+
+  const tabs = d.order.map(sid=>
+    `<button class="tab ${sid===d.tab?"on":""}" data-tab="${escA(sid)}">${esc(d.sessions[sid].name||"Session")}</button>`
+  ).join("") + `<button class="tab add" id="addSession">+</button>`;
+
+  const kinds = KINDS.map(k=>
+    `<option value="${k}" ${S.kind===k?"selected":""}>${k[0].toUpperCase()+k.slice(1)}</option>`).join("");
+
+  const exs = S.ex.map((e,i)=>`
+    <div class="ed-ex">
+      <div class="ed-head">
+        <span class="ed-n">${i+1}</span>
+        <input class="ed-name" data-fld="ex" data-i="${i}" data-k="name"
+               value="${escA(e.name||"")}" placeholder="Exercise name">
+        <button class="ed-ic" data-up="${i}" ${i===0?"disabled":""}>↑</button>
+        <button class="ed-ic" data-down="${i}" ${i===S.ex.length-1?"disabled":""}>↓</button>
+        <button class="ed-ic del" data-rm="${i}">✕</button>
+      </div>
+      <div class="ed-grid">
+        <div class="field"><span class="eyebrow">Sets</span>
+          <div class="stepper"><button data-ed="sets:-1:${i}">−</button>
+            <input type="number" inputmode="numeric" data-fld="ex" data-i="${i}" data-k="sets" value="${e.sets}">
+            <button data-ed="sets:1:${i}">+</button></div></div>
+        <div class="field"><span class="eyebrow">Reps</span>
+          <input class="ed-in" data-fld="ex" data-i="${i}" data-k="reps"
+                 value="${escA(e.reps||"")}" placeholder="8–12"></div>
+        <div class="field"><span class="eyebrow">Rest (sec)</span>
+          <div class="stepper"><button data-ed="rest:-15:${i}">−</button>
+            <input type="number" inputmode="numeric" data-fld="ex" data-i="${i}" data-k="rest" value="${e.rest}">
+            <button data-ed="rest:15:${i}">+</button></div></div>
+      </div>
+      <details class="form"><summary>Coaching notes</summary><div class="form-body">
+        <div class="field"><span class="eyebrow">Starting reps for a fresh set</span>
+          <input class="ed-in" type="number" inputmode="numeric" data-fld="ex" data-i="${i}" data-k="lo" value="${e.lo}"></div>
+        <div class="field"><span class="eyebrow">Or (alternative exercise)</span>
+          <input class="ed-in" data-fld="ex" data-i="${i}" data-k="alt" value="${escA(e.alt||"")}"></div>
+        <div class="field"><span class="eyebrow">YouTube video ID</span>
+          <input class="ed-in" data-fld="ex" data-i="${i}" data-k="vid" value="${escA(e.vid||"")}"
+                 placeholder="11 characters, e.g. jW4j7FoqudI"></div>
+        <div class="field"><span class="eyebrow">✓ Doing it right</span>
+          <textarea class="ed-in" rows="2" data-fld="ex" data-i="${i}" data-k="ok">${esc(e.ok||"")}</textarea></div>
+        <div class="field"><span class="eyebrow">✕ Doing it wrong</span>
+          <textarea class="ed-in" rows="2" data-fld="ex" data-i="${i}" data-k="no">${esc(e.no||"")}</textarea></div>
+        <div class="field"><span class="eyebrow">Cue</span>
+          <textarea class="ed-in" rows="2" data-fld="ex" data-i="${i}" data-k="cue">${esc(e.cue||"")}</textarea></div>
+        <div class="field"><span class="eyebrow">Warning</span>
+          <textarea class="ed-in" rows="2" data-fld="ex" data-i="${i}" data-k="warn">${esc(e.warn||"")}</textarea></div>
+      </div></details>
+    </div>`).join("");
+
+  return `<div class="topbar"><div class="topbar-row">
+      <button class="back" id="edCancel">Cancel</button>
+      <div class="counter">${d.srcId ? "EDIT PLAN" : "NEW PLAN"}</div>
+      <button class="back save" id="edSave">Save</button>
+    </div><div class="steps"></div></div>
+    <div class="wrap">
+      <div class="field"><span class="eyebrow">Plan name</span>
+        <input class="ed-in big" data-fld="name" value="${escA(d.name||"")}" placeholder="My plan"></div>
+
+      <div class="tabs edtabs">${tabs}</div>
+
+      <div class="ed-sess">
+        <div class="field"><span class="eyebrow">Session name</span>
+          <input class="ed-in" data-fld="sname" value="${escA(S.name||"")}" placeholder="Day 1"></div>
+        <div class="field"><span class="eyebrow">Warm-up style</span>
+          <select class="ed-in" data-fld="skind">${kinds}</select></div>
+      </div>
+
+      ${exs}
+      <button class="ghost" id="addEx">+ Add exercise</button>
+      <button class="ghost" id="delSession" style="color:var(--red);border-color:rgba(224,96,90,.4);">Remove this session</button>
+      <div class="ics-note">Exercises with no name are dropped when you save. Sessions are the days
+        you'll pick from on the home screen.</div>
+    </div>`;
 }
 
 function histChrome(inner){
@@ -908,8 +1545,9 @@ function histCal(){
     const recs = byDay[k];
     let cls="cell";
     if(recs){
-      const kinds = new Set(recs.map(r=>SESSIONS[r.session].kind));
-      cls += " hit " + (kinds.size>1 ? "both" : (kinds.has("upper") ? "upper" : "lower"));
+      const kinds = new Set(recs.map(recKind));
+      const up = kinds.has("upper"), lo = kinds.has("lower");
+      cls += " hit " + (up && lo ? "both" : up ? "upper" : lo ? "lower" : "full");
     }
     if(k===todayK) cls+=" today";
     if(state.selDay===k) cls+=" sel";
@@ -953,7 +1591,10 @@ function histCal(){
 }
 
 function viewSession(){
-  const s=state.session, S=SESSIONS[s], list=S.ex, last=list.length+1;
+  const s=state.session, S=sess(s);
+  /* the plan can be deleted from another tab while a session is open */
+  if(!S){ state.view="home"; state.session=null; return viewHome(); }
+  const list=S.ex, last=list.length+1;
 
   const steps = ["w",...list.map((_,i)=>i)].map((v,pos)=>{
     let c="";
@@ -968,7 +1609,7 @@ function viewSession(){
   if(state.idx===0){
     body = `<h2 class="ex-name">Warm-Up</h2><div class="ex-alt">About 5 minutes</div>
       <details class="form" open><summary>What to do</summary><div class="form-body">
-        <ul class="wu">${WARMUP[S.kind].map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
+        <ul class="wu">${(WARMUP[S.kind]||WARMUP.full).map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
     nav = `<button class="prev" id="back">Exit</button><button class="next ready" id="next">Start lifting →</button>`;
 
   } else if(state.idx===last){
@@ -980,7 +1621,7 @@ function viewSession(){
     const obj={}; entries.forEach(([n,v])=>obj[n]=v);
     body = `<div class="done-screen">
         <div class="done-mark">✓</div>
-        <h2 class="display">${S.name} done</h2>
+        <h2 class="display">${esc(S.name)} done</h2>
         <div class="done-sub">${entries.length ? volume(obj).toLocaleString()+" "+state.units+" total volume" : "Nothing logged"}</div>
       </div>
       <div class="summary">${rows}</div>
@@ -999,7 +1640,7 @@ function viewSession(){
         <span class="l">${v ? "set "+(n+1) : "set "+(n+1)}</span></button>`;
     }).join("");
 
-    const a=linkFor(ex.name);
+    const a=linkFor(ex.name, ex.vid);
     let vids = `<a class="vid ${a.vetted?"vetted":""}" href="${a.url}" target="_blank" rel="noopener">
         <span class="play">▶</span><span>${a.label}</span>${a.vetted?"":`<span class="tag">search</span>`}</a>`;
     if(ex.altVid){
@@ -1104,11 +1745,58 @@ function wire(){
   on("impJson", pickImport);
   document.querySelectorAll("[data-day]").forEach(b=>
     b.onclick=()=>{ state.selDay = state.selDay===b.dataset.day ? null : b.dataset.day; save(); render(); });
+  /* ---- plans ---- */
+  document.querySelectorAll("[data-use]").forEach(b=>   b.onclick=()=>usePlan(b.dataset.use));
+  document.querySelectorAll("[data-share]").forEach(b=> b.onclick=()=>sharePlan(b.dataset.share));
+  document.querySelectorAll("[data-edit]").forEach(b=>  b.onclick=()=>editPlan(b.dataset.edit));
+  document.querySelectorAll("[data-dup]").forEach(b=>   b.onclick=()=>dupPlan(b.dataset.dup));
+  document.querySelectorAll("[data-del]").forEach(b=>   b.onclick=()=>delPlan(b.dataset.del));
+  on("plans", plansView);
+  on("newPlan", newPlan);
+  on("impLink", pasteLink);
+  on("impYes", acceptShared);
+  on("impNo", rejectShared);
+
+  /* ---- editor ---- */
+  document.querySelectorAll("[data-tab]").forEach(b=>
+    b.onclick=()=>{ state.draft.tab=b.dataset.tab; save(); window.scrollTo(0,0); render(); });
+  document.querySelectorAll("[data-up]").forEach(b=>   b.onclick=()=>edMoveEx(+b.dataset.up,-1));
+  document.querySelectorAll("[data-down]").forEach(b=> b.onclick=()=>edMoveEx(+b.dataset.down,1));
+  document.querySelectorAll("[data-rm]").forEach(b=>   b.onclick=()=>edDelEx(+b.dataset.rm));
+  document.querySelectorAll("[data-ed]").forEach(b=> b.onclick=()=>{
+    const [f,dv,i] = b.dataset.ed.split(":");
+    const e = state.draft.sessions[state.draft.tab].ex[+i];
+    const [lo,hi] = f==="sets" ? [1,20] : [0,600];
+    e[f] = Math.min(hi, Math.max(lo, (parseInt(e[f])||0) + parseInt(dv)));
+    save(); render();
+  });
+
+  /* Field edits deliberately do NOT render — replacing #app mid-word would
+     drop the caret. The draft is updated in place and saved on a debounce. */
+  document.querySelectorAll("[data-fld]").forEach(el=> el.oninput=()=>{
+    const d = state.draft;
+    if(!d) return;
+    const f = el.dataset.fld;
+    if(f==="name")       d.name = el.value;
+    else if(f==="sname") d.sessions[d.tab].name = el.value;
+    else if(f==="skind") d.sessions[d.tab].kind = el.value;
+    else if(f==="ex"){
+      const e = d.sessions[d.tab].ex[+el.dataset.i], k = el.dataset.k;
+      e[k] = (k==="sets"||k==="rest"||k==="lo") ? (parseInt(el.value)||0) : el.value;
+    }
+    saveSoon();
+  });
+  on("addEx", edAddEx);
+  on("addSession", edAddSession);
+  on("delSession", edDelSession);
+  on("edSave", saveDraft);
+  on("edCancel", cancelDraft);
+
   on("next", ()=>go(1));
   on("prev", ()=>go(-1));
   on("back", home);
   on("back2", home);
-  on("hist", history);
+  on("hist", histView);
   on("wipe", wipe);
   on("units", ()=>{ state.units = state.units==="lb" ? "kg" : "lb"; save(); render(); });
   on("skip", stopRest);
@@ -1121,5 +1809,16 @@ if((location.protocol==="https:" || location.hostname==="localhost") && navigato
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 
-(async function(){ await load(); if(state.session) keepAwake(); render(); })();
+/* a shared link can also arrive while the app is already open (installed PWAs
+   get handed the URL without a reload) */
+window.addEventListener("hashchange", async ()=>{
+  if(await checkShareLink()){ save(); render(); }
+});
+
+(async function(){
+  await load();
+  if(await checkShareLink()) save();
+  if(state.session) keepAwake();
+  render();
+})();
 </script>
