@@ -66,7 +66,8 @@ persisted whole to the single `wk-v2` key.
 - `state.idx` is the session step cursor: `0` is the warm-up page, `1..n` are exercises, `n+1` is the save page.
 - `state.draft` is the plan being edited, persisted so a half-written plan survives a reload the same way
   `state.live` protects a half-finished workout.
-- `sheet` and `timer` are separate globals — deliberately *not* persisted, since they're transient UI.
+- `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
+  It is persisted; `timer.id` is only the repaint handle and stays a transient global, as does `sheet`.
 - `migrate()` runs on every load and is idempotent. v1 data (one hardcoded program, 2-part live keys, no
   `kind` on records) is upgraded in place; the storage key is unchanged so no history is lost.
 
@@ -94,9 +95,17 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
 - Any new interactive element needs a matching line in `wire()`, or it will be dead.
 - All user-supplied and program text must go through `esc()` — and **`escA()` inside an attribute**, since
   `esc()` leaves quotes intact and plan text is now user-authored and arrives from other people's phones.
-- An active rest timer short-circuits `render()` and takes over the whole screen (`viewRest()`).
+- An active rest timer short-circuits `render()` and takes over the whole screen (`viewRest()`), which is
+  why `render()` restarts the repaint interval itself when `state.rest` outlives a reload.
 - `paintRest()` mutates the countdown text directly each second instead of re-rendering — a full re-render
   every second would drop taps mid-set.
+- **The rest countdown is a deadline, never a tick count.** A hidden page has its timers throttled to
+  roughly once a minute or frozen outright, so `timer.left--` per tick drifted long — lock the phone
+  mid-rest and you'd unlock to a timer still claiming a minute left. `restLeft()` derives the number from
+  the clock, `visibilitychange` repaints immediately on return rather than waiting for a throttled tick,
+  and the buzz only fires on a *visible* crossing of zero (vibration is ignored while hidden, and buzzing
+  late on return is just noise). Waking the user through a locked screen would need the Notifications API
+  and a SW `showNotification()` — not built.
 - Editor text fields (`[data-fld]`) update `state.draft` on `oninput` and deliberately **do not** render;
   replacing `#app` mid-word drops the caret. Only structural edits re-render. Writes there go through
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.

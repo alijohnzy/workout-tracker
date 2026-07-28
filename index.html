@@ -523,7 +523,7 @@ async function initStore(){
 }
 
 let state = { v:2, view:"home", session:null, idx:0, units:"lb",
-              live:{}, log:[], plans:{}, planId:"builtin", draft:null };
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -535,6 +535,9 @@ async function load(){
   }catch(e){}
   let dirty = migrate();
   state.log.forEach(r=>{ if(!r.id){ r.id = mkId(r); dirty=true; } });
+  /* a rest that ran out ten minutes ago is noise, not state — don't reopen
+     the rest screen on top of the app the next time it's launched */
+  if(state.rest && Date.now() - state.rest.endsAt > 6e5){ state.rest = null; dirty = true; }
   if(dirty) save();
 }
 
@@ -1135,26 +1138,46 @@ function rejectShared(){ state.pending=null; state.view="home"; save(); render()
 /* ============================================================
    REST TIMER
    ============================================================ */
-let timer = { id:null, left:0, note:"", logged:"" };
+/* The countdown is a DEADLINE (state.rest.endsAt), never a tick count.
+   A hidden page has its timers throttled to about once a minute, or frozen
+   outright — anything that decremented per tick would quietly drift long, so
+   you'd lock the phone mid-rest and unlock to a timer still claiming a minute
+   left. Deriving the number from the clock makes a missed tick cost nothing.
+   timer.id is just the repaint handle and stays transient. */
+let timer = { id:null };
 const buzz = p => { try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} };
+const restLeft = () => state.rest ? Math.round((state.rest.endsAt - Date.now())/1000) : 0;
 
 let wakeLock = null;
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
 document.addEventListener("visibilitychange", ()=>{
-  if(document.visibilityState==="visible" && state.session) keepAwake();
+  if(document.visibilityState !== "visible") return;
+  if(state.session) keepAwake();   // the lock is auto-released while hidden
+  /* the next throttled tick could be up to a minute out — repaint now */
+  if(state.rest){ runRest(); paintRest(); }
 });
 
-function startRest(sec, note, logged){
-  timer.left=sec; timer.note=note; timer.logged=logged;
+function runRest(){
   clearInterval(timer.id);
   timer.id = setInterval(()=>{
-    timer.left--;
-    if(timer.left===0) buzz([200,100,200]);
+    if(!state.rest) return;
+    if(restLeft() <= 0 && !state.rest.buzzed){
+      state.rest.buzzed = true;
+      /* vibration is ignored while hidden anyway; buzzing late on return
+         would just be noise, so only ever buzz on a visible crossing */
+      if(document.visibilityState === "visible") buzz([200,100,200]);
+      save();
+    }
     paintRest();
-  },1000);
-  render();
+  }, 1000);
 }
-function stopRest(){ clearInterval(timer.id); timer.id=null; render(); }
+
+function startRest(sec, note, logged){
+  state.rest = { endsAt: Date.now() + sec*1000, note, logged, buzzed:false };
+  save(); runRest(); render();
+}
+function clearRest(){ clearInterval(timer.id); timer.id=null; state.rest=null; }
+function stopRest(){ clearRest(); save(); render(); }
 
 function fmtT(s){
   const neg = s<0; s = Math.abs(s);
@@ -1163,8 +1186,9 @@ function fmtT(s){
 function paintRest(){
   const el = document.getElementById("restTime");
   if(!el) return;
-  el.textContent = fmtT(timer.left);
-  el.classList.toggle("over", timer.left<=0);
+  const l = restLeft();
+  el.textContent = fmtT(l);
+  el.classList.toggle("over", l<=0);
 }
 
 /* ============================================================
@@ -1239,6 +1263,7 @@ function saveWorkout(){
     entries
   });
   S.ex.forEach((_,i)=> delete state.live[lk(s,i)]);
+  clearRest();
   state.view="home"; state.session=null; save(); render();
 }
 
@@ -1264,7 +1289,7 @@ const escA = t => esc(t).replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 function render(){
   const app = document.getElementById("app");
-  if(timer.id !== null){ app.innerHTML = viewRest(); wire(); return; }
+  if(state.rest){ if(timer.id===null) runRest(); app.innerHTML = viewRest(); wire(); return; }
   app.innerHTML = state.view==="history" ? viewHistory()
                 : state.view==="session" ? viewSession()
                 : state.view==="plans"   ? viewPlans()
@@ -1703,9 +1728,9 @@ function viewSession(){
 function viewRest(){
   return `<div class="rest">
     <div class="rest-label">Rest</div>
-    <div class="rest-time" id="restTime">${fmtT(timer.left)}</div>
-    ${timer.logged ? `<div class="rest-logged">Logged ${esc(timer.logged)}</div>` : ""}
-    <div class="rest-next">${esc(timer.note)}</div>
+    <div class="rest-time" id="restTime">${fmtT(restLeft())}</div>
+    ${state.rest.logged ? `<div class="rest-logged">Logged ${esc(state.rest.logged)}</div>` : ""}
+    <div class="rest-next">${esc(state.rest.note)}</div>
     <div class="rest-btns"><button class="add" id="add30">+30 sec</button>
       <button class="skip" id="skip">Done resting</button></div></div>`;
 }
@@ -1800,7 +1825,7 @@ function wire(){
   on("wipe", wipe);
   on("units", ()=>{ state.units = state.units==="lb" ? "kg" : "lb"; save(); render(); });
   on("skip", stopRest);
-  on("add30", ()=>{ timer.left+=30; paintRest(); });
+  on("add30", ()=>{ state.rest.endsAt += 30000; state.rest.buzzed=false; save(); paintRest(); });
 }
 
 /* Offline caching, only where the platform allows it. On file:// or content://
