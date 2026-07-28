@@ -50,6 +50,9 @@ the JSON export before switching phones.
 There is no build system and no package manager. Edit `index.html` and reload.
 
 ```bash
+# Tests — plain node, no dependencies to install
+node test.mjs
+
 # Quickest loop — file:// works for everything except the service worker
 xdg-open index.html
 
@@ -82,6 +85,7 @@ rsvg-convert -w 180 -h 180 icon-maskable.svg -o apple-touch-icon.png
 | `sw.js` | Service worker: precaches everything, cache-first, skips cross-origin |
 | `manifest.webmanifest` | Install metadata; `icon.svg` / `icon-maskable.svg` are the icon sources |
 | `deploy.sh` | Publishes to GitHub Pages and bumps the cache version |
+| `test.mjs`, `test.cases.js` | Dev-only test suite — `node test.mjs`, no dependencies |
 | `CLAUDE.md` | Architecture notes and the reasoning behind the non-obvious bits |
 
 `CLAUDE.md` is the one to read before changing anything — it documents the traps that aren't visible in

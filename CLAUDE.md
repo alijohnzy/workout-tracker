@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A 4-day upper/lower workout tracker, built as an installable PWA. It is deployed to GitHub Pages
 (`https://gageracer.github.io/workout-tracker/`) and used on a phone, in a gym, usually with no signal.
 
-There is **no build system, no package manager, no dependencies, and no test suite**. The entire app is
-`index.html` — markup, CSS, and JavaScript inlined in one file. Everything else exists only to make it
-installable and offline-capable.
+There is **no build system, no package manager, and no dependencies**. The entire app is `index.html` —
+markup, CSS, and JavaScript inlined in one file. Everything else exists only to make it installable and
+offline-capable, except `test.mjs` / `test.cases.js`, which are dev-only and never shipped to the phone.
 
 ## Commands
 
@@ -19,6 +19,9 @@ xdg-open index.html
 
 # Preview with the service worker + manifest active (they need http://)
 python3 -m http.server 8000    # then open http://localhost:8000
+
+# Run the test suite (no dependencies; non-zero exit on failure)
+node test.mjs
 
 # Deploy to GitHub Pages (also auto-bumps the sw.js cache version, commits, pushes)
 ./deploy.sh "commit message"
@@ -134,6 +137,10 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
   the clock, and `visibilitychange` repaints immediately on return rather than waiting for a throttled
   tick. Completion is signalled once, through whichever channel is live at the moment it's noticed:
   `navigator.vibrate()` if the page is visible, a notification if it isn't.
+- The set sheet's weight `+`/`-` walk a **ladder**, not a fixed delta: `wStep()` returns the next value
+  that is a multiple of 2 *or* 2.5 (0, 2, 2.5, 4, 5, 6, 7.5, 8, 10, 12, 12.5 …), because machine stacks
+  come in both and one fixed step always missed half the pins. It's derived, so it has no ceiling, and
+  it snaps an off-ladder number to the neighbouring rung rather than shifting the whole grid.
 - Editor text fields (`[data-fld]`) update `state.draft` on `oninput` and deliberately **do not** render;
   replacing `#app` mid-word drops the caret. Only structural edits re-render. Writes there go through
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.
@@ -180,10 +187,18 @@ folding (`fold()`) and escaping (`icsEsc()`).
 
 ## Testing
 
-There's no test runner, but the script can be lifted out of `index.html` and exercised in Node with
-stubbed DOM globals — `vm.runInContext(js + tests)` in one script so the tests see the top-level
-`const`/`let` bindings. Worth doing for the codec, the validators, and `migrate()`. A real-engine check
-needs no dependencies either:
+`node test.mjs` — no dependencies, no runner, no config. It lifts the script out of `index.html` and
+runs it against stubbed DOM globals, with `test.cases.js` **concatenated into the same script** so the
+assertions can see the top-level `const`/`let` bindings. Exit code is non-zero on failure.
+
+The stubs matter as much as the cases: `NOW`/`VIS` are a controllable clock and visibility flag (that's
+how the frozen-page rest timer is tested), and `navigator.serviceWorker` records every
+`showNotification()` call. Two traps when adding cases — a `pkill -f` pattern that also matches your own
+shell will kill the run, and `\n` inside `test.cases.js` is fine but was a repeated footgun back when the
+cases lived in a template literal.
+
+Cover the things that rot silently: the share codec, the hostile-input validators, `migrate()`, and any
+invariant a view depends on. A real-engine check needs no dependencies either:
 
 ```bash
 python3 -m http.server 8000 &
