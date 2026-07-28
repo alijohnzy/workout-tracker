@@ -94,6 +94,13 @@ gesture behind it). Four constraints shaped this and shouldn't be relitigated:
 - Both use `tag:"rest"` so there is only ever one, replaced in place; `closeRestNote()` clears it when the
   rest is cleared or when you return to a finished rest. `sw.js` has a `notificationclick` handler that
   focuses the existing window instead of opening a second copy.
+- **The silent-audio keepalive was considered and rejected — don't add it.** Looping silent audio holds an
+  audio session, which stops Android freezing the page and would make the alert land on time; it's the
+  standard web workout-timer trick. But Chrome on Android takes media focus even for silent audio, which
+  pauses music from other apps. The owner always trains with music on, so that trade is a non-starter here
+  — a late buzz beats a stopped playlist. Web Push was rejected too: it needs a server *and* a signal, and
+  this app is built for a gym with neither. Late-on-unlock is the accepted behaviour, which is exactly why
+  the ongoing notification names the target clock time — you can read it off the lock screen.
 
 **SHARE** — a plan travels as a URL hash: `#p=<flag><base64url>`. `packPlan()` maps to short keys, then
 `deflate-raw` via `CompressionStream` (flag `z`), falling back to uncompressed bytes (flag `j`). A
