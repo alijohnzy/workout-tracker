@@ -28,8 +28,9 @@ when your phone throttles or freezes the page. Optional notifications (off by de
 time on your lock screen and buzz when the rest ends.
 
 **Build your own plans.** The bundled 4-day upper/lower split is the read-only *Recommended* plan.
-Duplicate it, or start from scratch — name your sessions, add exercises, set sets/reps/rest, and
-optionally add your own coaching notes and a YouTube demo.
+Duplicate it, or start from scratch — name your sessions, write the warm-up, add exercises, set
+sets/reps/rest, and optionally add your own coaching notes and a YouTube demo. A session without its own
+warm-up inherits a sensible default for its upper/lower/full style.
 
 **Share a plan as a link.** Sharing encodes the whole plan into the URL itself — no server, no accounts,
 nothing uploaded. A 20-exercise plan with every coaching field filled comes to about 560 characters, so

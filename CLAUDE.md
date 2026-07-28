@@ -42,8 +42,14 @@ rsvg-convert -w 180 -h 180 icon-maskable.svg -o apple-touch-icon.png
 Science PDF. **Never invent a YouTube ID.** `linkFor()` deliberately degrades to a YouTube *search* URL
 for anything unlisted, and the UI marks the difference (`vetted`).
 
+Warm-ups hang off the **session**, not the kind: `session.warmup` is an optional array of steps and
+`warmupFor()` falls back to `WARMUP[kind]` when it's absent. Optional on purpose — plans and shared links
+written before warm-ups were editable keep working. `PROGRAM_V` / `PROGRAM_CHANGED` exist because
+`state.live` is keyed by exercise *index*: whenever the built-in programme's exercise order changes, bump
+`PROGRAM_V` or stale in-progress sets silently re-attach to whatever now sits at that position.
+
 **PLANS** — `BUILTIN` wraps the consts above as the read-only "Recommended" plan. A plan is
-`{id, name, order:[…], sessions:{ id:{name, kind, ex:[…]} }}` — deliberately the same shape `SESSIONS`
+`{id, name, order:[…], sessions:{ id:{name, kind, warmup?, ex:[…]} }}` — deliberately the same shape `SESSIONS`
 already had, so every exercise renderer works unchanged. Reach the active plan through the accessors
 `plan()`, `sess(id)`, `order()`, `allPlans()`; **never touch `SESSIONS`/`ORDER` directly** outside
 `BUILTIN`. `BUILTIN` is never written to storage, so a deploy can improve the recommended program

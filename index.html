@@ -270,6 +270,9 @@
   .ed-in.big{font-size:17px;font-weight:700;}
   .ed-sess{display:flex;gap:10px;margin-bottom:18px;}
   .ed-sess .field .eyebrow{text-align:left;}
+  .ed-warm{margin-bottom:18px;}
+  .ed-warm .eyebrow{text-align:left;}
+  .ed-warm textarea{line-height:1.5;}
   .ed-ex{background:var(--surface);border:1px solid var(--line);border-radius:12px;
          padding:12px;margin-bottom:12px;}
   .ed-head{display:flex;align-items:center;gap:7px;}
@@ -314,12 +317,31 @@ const WARMUP = {
 };
 const KINDS = ["upper","lower","full"];
 
+/* A session may carry its own warm-up; otherwise it inherits the one for its
+   kind. Optional by design, so plans and shared links written before warm-ups
+   were editable keep working untouched. */
+const warmupFor = S => (S && S.warmup && S.warmup.length) ? S.warmup : (WARMUP[S && S.kind] || WARMUP.full);
+
+/* One set of each, first thing, while you're still fresh — small muscles that
+   don't interfere with the leg work that follows. Shared by both lower days;
+   BUILTIN is read-only and duplication deep-copies, so one array is safe. */
+const ARMS = [
+  { name:"Dumbbell Biceps Curl", sets:1, reps:"10–12", lo:10, rest:60,
+    ok:"Elbows stay pinned at your sides and only your forearms move.",
+    no:"You're swinging the weight up with your back, or your elbows drift forward at the top.",
+    cue:"Slow on the way down. One set is all this needs — it's here to stay, not to grow you on its own." },
+  { name:"Cable Triceps Pushdown", sets:1, reps:"10–12", lo:10, rest:60,
+    ok:"Upper arms locked against your ribs, elbows straightening fully at the bottom.",
+    no:"You're leaning over the bar and driving it down with your bodyweight.",
+    cue:"Elbows glued to your sides. If you have to lean in to move it, it's too heavy." }
+];
+
 const SESSIONS = {
   upperA:{ name:"Upper A", kind:"upper", ex:[
-    { name:"Low Incline Barbell Press", alt:"Incline Machine Chest Press", altVid:"Incline Machine Chest Press", sets:3, reps:"8–10", lo:8, rest:120,
-      ok:"Shoulder blades stay pinned back and down against the bench the whole set, feet flat, bar touching your upper chest near the collarbone.",
-      no:"Elbows flare straight out to 90°, your butt lifts off the bench, or the bar bounces off your chest.",
-      cue:"Bench at the first or second notch up from flat. Grip slightly outside shoulder width." },
+    { name:"Low Incline Dumbbell Press", alt:"Incline Machine Chest Press", altVid:"Incline Machine Chest Press", sets:3, reps:"8–10", lo:8, rest:120,
+      ok:"Shoulder blades stay pinned back and down against the bench the whole set, feet flat, dumbbells coming down to the sides of your upper chest.",
+      no:"Elbows flare straight out to 90°, your butt lifts off the bench, or the dumbbells clank together at the top.",
+      cue:"Bench at 30–45°. Sit with the dumbbells on your thighs and kick them up one at a time as you lie back." },
     { name:"Lat Pulldown", sets:3, reps:"8–12", lo:8, rest:90,
       ok:"You feel it under your armpits and along the outer back, with a slight backward lean held constant through the rep.",
       no:"You're rocking back and forth to move the weight, shoulders shrugging toward your ears, or you feel it mostly in your biceps.",
@@ -333,12 +355,12 @@ const SESSIONS = {
       no:"You're swinging your torso, shrugging your traps up, or raising much above shoulder height.",
       cue:"Lead with the elbow, not the hand. Pretend you're pouring a jug of water out at the top." }
   ]},
-  lowerA:{ name:"Lower A", kind:"lower", ex:[
-    { name:"Leg Press", sets:3, reps:"10–12", lo:10, rest:120,
-      ok:"Your entire lower back and butt stay flat against the pad from top to bottom, feet shoulder-width and flat on the platform.",
-      no:"Your hips curl up off the pad at the bottom, or you slam your knees into full lockout at the top.",
-      cue:"Lower until knees are ~90° or slightly deeper — but only as deep as you can go without your lower back peeling off the pad.",
-      warn:"Hips curling off the pad is a real injury risk, not just wasted effort. Stop short of it every time." },
+  lowerA:{ name:"Lower A", kind:"lower",
+    warmup:["Forward leg swings — 5 per side","Side leg swings — 5 per side",
+            "Bodyweight deep squat hold — 30 seconds",
+            "First leg exercise only: 50% weight × 8, then 70% × 4"],
+    ex:[
+    ...ARMS,
     { name:"Seated Leg Curl", sets:3, reps:"10–12", lo:10, rest:90,
       ok:"Strong stretch in the hamstrings at the top, hard contraction at the bottom, hips staying planted.",
       no:"Your butt lifts out of the seat, or you let the weight snap back up fast.",
@@ -347,6 +369,11 @@ const SESSIONS = {
       ok:"Back stays against the pad and it's a clean burn in the front of the thighs.",
       no:"You're throwing your torso back to help, or the pad sits painfully on your shins.",
       cue:"Adjust the pad to sit just above the ankle, not on the shin." },
+    { name:"Leg Press", sets:3, reps:"10–12", lo:10, rest:120,
+      ok:"Your entire lower back and butt stay flat against the pad from top to bottom, feet shoulder-width and flat on the platform.",
+      no:"Your hips curl up off the pad at the bottom, or you slam your knees into full lockout at the top.",
+      cue:"Lower until knees are ~90° or slightly deeper — but only as deep as you can go without your lower back peeling off the pad.",
+      warn:"Hips curling off the pad is a real injury risk, not just wasted effort. Stop short of it every time." },
     { name:"45° Back Extension", alt:"Bodyweight only for now", sets:2, reps:"12–15", lo:12, rest:60,
       ok:"You feel it in your glutes and lower back, moving through a smooth arc.",
       no:"You hyperextend hard at the top and crank your back past straight.",
@@ -370,7 +397,13 @@ const SESSIONS = {
       no:"You're using so much weight you have to lean back and heave.",
       cue:"High reps, light weight, spread the rope apart at the end. Joint insurance more than muscle building." }
   ]},
-  lowerB:{ name:"Lower B", kind:"lower", ex:[
+  lowerB:{ name:"Lower B", kind:"lower",
+    warmup:["Forward leg swings — 5 per side","Side leg swings — 5 per side",
+            "Bodyweight deep squat hold — 30 seconds",
+            "First leg exercise only: 50% weight × 8, then 70% × 4",
+            "Leg curl and leg extension — 1 set each at 50% weight"],
+    ex:[
+    ...ARMS,
     { name:"Dumbbell Goblet Squat", alt:"Hack Squat Machine", altVid:"Hack Squat Machine", sets:3, reps:"8–12", lo:8, rest:120,
       ok:"Torso stays upright, heels stay planted, knees track out over your toes.",
       no:"Heels lift off the floor, knees cave inward, or your lower back rounds under at the bottom.",
@@ -423,6 +456,11 @@ function linkFor(n, vid){
    single state blob. state.plans holds only user-authored plans.
    ============================================================ */
 const BUILTIN = { id:"builtin", name:"4-Day Upper/Lower", order:ORDER, sessions:SESSIONS };
+/* Bump when the built-in programme's exercise ORDER changes. state.live is
+   keyed by exercise index, so stale scratchpad entries would silently
+   re-attach to whatever now sits at that position. */
+const PROGRAM_V = 2;
+const PROGRAM_CHANGED = ["upperA","lowerA","lowerB"];
 
 const plan      = () => state.plans[state.planId] || BUILTIN;
 const sess      = id => plan().sessions[id];
@@ -523,7 +561,7 @@ async function initStore(){
 }
 
 let state = { v:2, view:"home", session:null, idx:0, units:"lb",
-              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false };
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false, pv:0 };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -538,6 +576,14 @@ async function load(){
   /* a rest that ran out ten minutes ago is noise, not state — don't reopen
      the rest screen on top of the app the next time it's launched */
   if(state.rest && Date.now() - state.rest.endsAt > 6e5){ state.rest = null; dirty = true; }
+  /* drop in-progress sets for built-in sessions whose exercise order moved */
+  if(state.pv !== PROGRAM_V){
+    PROGRAM_CHANGED.forEach(sid=>{
+      const pre = "builtin:"+sid+":";
+      Object.keys(state.live).forEach(k=>{ if(k.startsWith(pre)) delete state.live[k]; });
+    });
+    state.pv = PROGRAM_V; dirty = true;
+  }
   if(dirty) save();
 }
 
@@ -833,7 +879,7 @@ function pickImport(){
    Measured: a 4-session x 5-exercise plan with every coaching field filled
    is ~6.5 KB of JSON, 384 B deflated, a 560-character URL.
    ============================================================ */
-const S_MAX = 14, E_MAX = 50, TXT_MAX = 400, NAME_MAX = 60;
+const S_MAX = 14, E_MAX = 50, TXT_MAX = 400, NAME_MAX = 60, WU_MAX = 20;
 
 const clampS = (v,max) => typeof v === "string" ? v.slice(0,max) : "";
 const clampN = (v,lo,hi,dflt) => {
@@ -859,6 +905,7 @@ function packPlan(p){
       if(e.vid)    o.v  = e.vid;
       return o;
     })};
+    if(S.warmup && S.warmup.length) s[id].u = S.warmup;
   });
   return { f:"wq", v:1, n:p.name, o:p.order.filter(id=>p.sessions[id]), s };
 }
@@ -907,6 +954,10 @@ function unpackPlan(d){
       kind: KINDS.includes(S.k) ? S.k : "full",
       ex
     };
+    if(Array.isArray(S.u)){
+      const wu = S.u.slice(0, WU_MAX).map(t => clampS(t, TXT_MAX).trim()).filter(Boolean);
+      if(wu.length) sessions[sid].warmup = wu;
+    }
     ord.push(sid);
   });
 
@@ -994,7 +1045,7 @@ function usePlan(id){
 }
 
 const blankEx = () => ({ name:"", sets:3, reps:"8–12", lo:8, rest:90 });
-const blankSession = n => ({ name:n||"Day 1", kind:"full", ex:[blankEx()] });
+const blankSession = n => ({ name:n||"Day 1", kind:"full", warmup:[...WARMUP.full], ex:[blankEx()] });
 
 function startDraft(p, srcId){
   const d = p ? JSON.parse(JSON.stringify(p)) : null;
@@ -1039,9 +1090,12 @@ function saveDraft(){
     if(!S) return;
     const ex = S.ex.filter(e => (e.name||"").trim());
     if(!ex.length) return;
+    const wu = (Array.isArray(S.warmup) ? S.warmup : String(S.warmup||"").split("\n"))
+      .map(t => String(t).trim().slice(0,TXT_MAX)).filter(Boolean).slice(0, WU_MAX);
     sessions[sid] = {
       name:(S.name||"").trim() || "Session",
       kind: KINDS.includes(S.kind) ? S.kind : "full",
+      ...(wu.length ? { warmup: wu } : {}),
       ex: ex.map(e=>{
         const o = { name:e.name.trim(), sets:clampN(e.sets,1,20,3),
                     reps:(e.reps||"").trim() || "8–12",
@@ -1554,6 +1608,11 @@ function viewEditor(){
           <select class="ed-in" data-fld="skind">${kinds}</select></div>
       </div>
 
+      <div class="field ed-warm"><span class="eyebrow">Warm-up — one step per line</span>
+        <textarea class="ed-in" rows="5" data-fld="swarm">${esc(
+          Array.isArray(S.warmup) ? S.warmup.join("\n") : (S.warmup !== undefined ? S.warmup : warmupFor(S).join("\n"))
+        )}</textarea></div>
+
       ${exs}
       <button class="ghost" id="addEx">+ Add exercise</button>
       <button class="ghost" id="delSession" style="color:var(--red);border-color:rgba(224,96,90,.4);">Remove this session</button>
@@ -1693,7 +1752,7 @@ function viewSession(){
   if(state.idx===0){
     body = `<h2 class="ex-name">Warm-Up</h2><div class="ex-alt">About 5 minutes</div>
       <details class="form" open><summary>What to do</summary><div class="form-body">
-        <ul class="wu">${(WARMUP[S.kind]||WARMUP.full).map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
+        <ul class="wu">${warmupFor(S).map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
     nav = `<button class="prev" id="back">Exit</button><button class="next ready" id="next">Start lifting →</button>`;
 
   } else if(state.idx===last){
@@ -1864,6 +1923,7 @@ function wire(){
     if(f==="name")       d.name = el.value;
     else if(f==="sname") d.sessions[d.tab].name = el.value;
     else if(f==="skind") d.sessions[d.tab].kind = el.value;
+    else if(f==="swarm") d.sessions[d.tab].warmup = el.value;
     else if(f==="ex"){
       const e = d.sessions[d.tab].ex[+el.dataset.i], k = el.dataset.k;
       e[k] = (k==="sets"||k==="rest"||k==="lo") ? (parseInt(el.value)||0) : el.value;
