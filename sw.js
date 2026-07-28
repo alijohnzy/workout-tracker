@@ -1,6 +1,6 @@
 /* Bump this string whenever you change index.html — it's what forces
    phones to pick up the new version instead of serving the old cache. */
-const CACHE = "4day-v6";
+const CACHE = "4day-v7";
 /* addAll() is atomic — one 404 here and the worker never installs, silently
    killing offline mode. Every path listed must actually ship. */
 const ASSETS = [
@@ -24,6 +24,20 @@ self.addEventListener("activate", e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+/* Tapping a rest notification should land you back in the session, not open
+   a second copy of the app. */
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type:"window", includeUncontrolled:true }).then(list => {
+      for(const c of list){
+        if(c.url.startsWith(self.registration.scope) && "focus" in c) return c.focus();
+      }
+      return self.clients.openWindow ? self.clients.openWindow("./index.html") : undefined;
+    })
   );
 });
 

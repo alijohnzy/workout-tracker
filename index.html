@@ -523,7 +523,7 @@ async function initStore(){
 }
 
 let state = { v:2, view:"home", session:null, idx:0, units:"lb",
-              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null };
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -1154,7 +1154,7 @@ document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState !== "visible") return;
   if(state.session) keepAwake();   // the lock is auto-released while hidden
   /* the next throttled tick could be up to a minute out — repaint now */
-  if(state.rest){ runRest(); paintRest(); }
+  if(state.rest){ runRest(); paintRest(); if(restLeft() <= 0) closeRestNote(); }
 });
 
 function runRest(){
@@ -1163,9 +1163,10 @@ function runRest(){
     if(!state.rest) return;
     if(restLeft() <= 0 && !state.rest.buzzed){
       state.rest.buzzed = true;
-      /* vibration is ignored while hidden anyway; buzzing late on return
-         would just be noise, so only ever buzz on a visible crossing */
+      /* whichever channel is actually available right now: in-page vibration
+         needs visibility, the notification works while hidden */
       if(document.visibilityState === "visible") buzz([200,100,200]);
+      else showRestNote(true);
       save();
     }
     paintRest();
@@ -1174,9 +1175,9 @@ function runRest(){
 
 function startRest(sec, note, logged){
   state.rest = { endsAt: Date.now() + sec*1000, note, logged, buzzed:false };
-  save(); runRest(); render();
+  save(); runRest(); showRestNote(false); render();
 }
-function clearRest(){ clearInterval(timer.id); timer.id=null; state.rest=null; }
+function clearRest(){ clearInterval(timer.id); timer.id=null; state.rest=null; closeRestNote(); }
 function stopRest(){ clearRest(); save(); render(); }
 
 function fmtT(s){
@@ -1189,6 +1190,63 @@ function paintRest(){
   const l = restLeft();
   el.textContent = fmtT(l);
   el.classList.toggle("over", l<=0);
+}
+
+/* ============================================================
+   REST NOTIFICATIONS
+
+   A web page cannot schedule a notification for a future time — Notification
+   Triggers was an origin trial and never shipped — so the "done" alert is
+   fired by our own timer. If Android freezes or evicts the tab it lands late,
+   on the next wake, or not at all. That is why the ongoing notification spells
+   out the target clock time: it stays useful even when the alert doesn't
+   arrive on the second.
+
+   Android forbids the `new Notification()` constructor, so everything goes
+   through the service worker registration.
+   ============================================================ */
+const REST_TAG = "rest";
+const canNotify = () => typeof Notification !== "undefined" && !!navigator.serviceWorker;
+const swReg = async () => { try{ return await navigator.serviceWorker.getRegistration(); }catch(e){ return null; } };
+
+async function toggleNotify(){
+  if(state.notify){ state.notify=false; save(); closeRestNote(); render(); return; }
+  let p = Notification.permission;
+  if(p === "default"){ try{ p = await Notification.requestPermission(); }catch(e){} }
+  if(p !== "granted"){
+    alert("Notifications are blocked for this site.\n\nTurn them back on in your browser's site settings, then try again.");
+    return;
+  }
+  state.notify = true; save(); render();
+  if(state.rest) showRestNote(false);
+}
+
+async function showRestNote(done){
+  if(!state.notify || !canNotify() || Notification.permission !== "granted") return;
+  const r = state.rest;
+  if(!r) return;
+  const reg = await swReg();
+  if(!reg || !reg.showNotification) return;
+  const at = new Date(r.endsAt).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+  const opt = {
+    tag: REST_TAG,            // one rest notification, replaced in place
+    renotify: done,
+    icon: "icon-192.png",
+    requireInteraction: false,
+    body: done ? (r.note || "Back to it.") : "Until " + at + (r.note ? " · " + r.note : "")
+  };
+  /* silent:true suppresses vibration as well as sound, so it's only right for
+     the ongoing one. The finish buzzes via the notification's own vibrate —
+     navigator.vibrate() is ignored while the page is hidden. */
+  if(done) opt.vibrate = [200,100,200]; else opt.silent = true;
+  try{ await reg.showNotification(done ? "Rest done" : "Resting", opt); }catch(e){}
+}
+
+async function closeRestNote(){
+  if(!canNotify()) return;
+  const reg = await swReg();
+  if(!reg || !reg.getNotifications) return;
+  try{ (await reg.getNotifications({tag:REST_TAG})).forEach(n=>n.close()); }catch(e){}
 }
 
 /* ============================================================
@@ -1345,6 +1403,7 @@ function viewHome(){
       with good form, that's the right place to stop.</div>
     <button class="ghost" id="plans">Plans — switch, create or share</button>
     <button class="ghost" id="hist">View history (${n})</button>
+    ${canNotify() ? `<button class="ghost" id="notify">Rest alerts: ${state.notify?"On":"Off"} — tap to switch</button>` : ""}
     <button class="ghost" id="units">Units: ${state.units.toUpperCase()} — tap to switch</button>
   </div>`;
 }
@@ -1823,9 +1882,10 @@ function wire(){
   on("back2", home);
   on("hist", histView);
   on("wipe", wipe);
+  on("notify", toggleNotify);
   on("units", ()=>{ state.units = state.units==="lb" ? "kg" : "lb"; save(); render(); });
   on("skip", stopRest);
-  on("add30", ()=>{ state.rest.endsAt += 30000; state.rest.buzzed=false; save(); paintRest(); });
+  on("add30", ()=>{ state.rest.endsAt += 30000; state.rest.buzzed=false; save(); paintRest(); showRestNote(false); });
 }
 
 /* Offline caching, only where the platform allows it. On file:// or content://

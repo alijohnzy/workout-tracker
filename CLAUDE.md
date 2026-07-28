@@ -68,6 +68,7 @@ persisted whole to the single `wk-v2` key.
   `state.live` protects a half-finished workout.
 - `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
   It is persisted; `timer.id` is only the repaint handle and stays a transient global, as does `sheet`.
+- `state.notify` is the opt-in for rest notifications.
 - `migrate()` runs on every load and is idempotent. v1 data (one hardcoded program, 2-part live keys, no
   `kind` on records) is upgraded in place; the storage key is unchanged so no history is lost.
 
@@ -78,6 +79,21 @@ must work offline). Three traps this exists to avoid, so don't "simplify" it awa
 2. Subtracting milliseconds to count days is wrong across DST — use `T.daysBetween()`.
 3. Log records store both `day` (local calendar date) and `zone` at save time, so history stays correct if
    the user travels. Read a record's day via `recDay()`, never off `date`.
+
+**REST NOTIFICATIONS** — opt-in (`state.notify`, toggled from home so the permission prompt has a user
+gesture behind it). Four constraints shaped this and shouldn't be relitigated:
+- **A page cannot schedule a notification.** Notification Triggers was an origin trial and never shipped,
+  so the "done" alert is fired by our own 1-second tick. If Android freezes or evicts the tab it lands
+  late or not at all — which is exactly why the *ongoing* notification spells out the target clock time
+  rather than a countdown. Don't promise second-accurate alerts.
+- **Android forbids `new Notification()`** — everything goes through
+  `ServiceWorkerRegistration.showNotification()`, so this only works where the SW registered.
+- **`silent:true` suppresses vibration as well as sound**, so it's set only on the ongoing notification.
+  The finish carries `vibrate:[200,100,200]` instead — `navigator.vibrate()` is ignored while hidden.
+  Whether a sound also plays is finally the OS notification channel's call, not ours.
+- Both use `tag:"rest"` so there is only ever one, replaced in place; `closeRestNote()` clears it when the
+  rest is cleared or when you return to a finished rest. `sw.js` has a `notificationclick` handler that
+  focuses the existing window instead of opening a second copy.
 
 **SHARE** — a plan travels as a URL hash: `#p=<flag><base64url>`. `packPlan()` maps to short keys, then
 `deflate-raw` via `CompressionStream` (flag `z`), falling back to uncompressed bytes (flag `j`). A
@@ -102,10 +118,9 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
 - **The rest countdown is a deadline, never a tick count.** A hidden page has its timers throttled to
   roughly once a minute or frozen outright, so `timer.left--` per tick drifted long — lock the phone
   mid-rest and you'd unlock to a timer still claiming a minute left. `restLeft()` derives the number from
-  the clock, `visibilitychange` repaints immediately on return rather than waiting for a throttled tick,
-  and the buzz only fires on a *visible* crossing of zero (vibration is ignored while hidden, and buzzing
-  late on return is just noise). Waking the user through a locked screen would need the Notifications API
-  and a SW `showNotification()` — not built.
+  the clock, and `visibilitychange` repaints immediately on return rather than waiting for a throttled
+  tick. Completion is signalled once, through whichever channel is live at the moment it's noticed:
+  `navigator.vibrate()` if the page is visible, a notification if it isn't.
 - Editor text fields (`[data-fld]`) update `state.draft` on `oninput` and deliberately **do not** render;
   replacing `#app` mid-word drops the caret. Only structural edits re-render. Writes there go through
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.
