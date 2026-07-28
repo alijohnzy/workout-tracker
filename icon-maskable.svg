@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable variant. Android crops launcher icons to a circle 80% of the
+       icon's width, so the barbell from icon.svg is scaled to 0.72 about the
+       centre to keep every plate inside that safe zone. Background is full
+       bleed because the mask can also be a square or a squircle. -->
+  <rect width="512" height="512" fill="#0F1622"/>
+  <g transform="translate(256 256) scale(0.72) translate(-256 -256)">
+    <rect x="96"  y="236" width="320" height="40" rx="12" fill="#3B6FE0"/>
+    <rect x="56"  y="186" width="56"  height="140" rx="16" fill="#E0B048"/>
+    <rect x="400" y="186" width="56"  height="140" rx="16" fill="#E0B048"/>
+    <rect x="28"  y="216" width="30"  height="80"  rx="10" fill="#E0B048" opacity="0.7"/>
+    <rect x="454" y="216" width="30"  height="80"  rx="10" fill="#E0B048" opacity="0.7"/>
+  </g>
+</svg>

@@ -1,7 +1,15 @@
 /* Bump this string whenever you change index.html — it's what forces
    phones to pick up the new version instead of serving the old cache. */
-const CACHE = "4day-v2";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
+const CACHE = "4day-v4";
+/* addAll() is atomic — one 404 here and the worker never installs, silently
+   killing offline mode. Every path listed must actually ship. */
+const ASSETS = [
+  "./", "./index.html", "./manifest.webmanifest",
+  "./icon.svg", "./icon-maskable.svg",
+  "./icon-192.png", "./icon-512.png",
+  "./icon-maskable-192.png", "./icon-maskable-512.png",
+  "./apple-touch-icon.png"
+];
 
 self.addEventListener("install", e => {
   e.waitUntil(
