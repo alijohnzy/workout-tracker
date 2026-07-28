@@ -137,6 +137,10 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
   the clock, and `visibilitychange` repaints immediately on return rather than waiting for a throttled
   tick. Completion is signalled once, through whichever channel is live at the moment it's noticed:
   `navigator.vibrate()` if the page is visible, a notification if it isn't.
+- The set sheet opens set *n* on what set *n* was **last session** (`prevSet()`), not on today's
+  previous set — deliberately, so last week's figure is visible every time even after you've moved up
+  today. It only falls back to today's last set when history has fewer sets than you're doing now.
+  Unlogged set buttons carry the same figure as a `last 50×10` label.
 - The set sheet's weight `+`/`-` walk a **ladder**, not a fixed delta: `wStep()` returns the next value
   that is a multiple of 2 *or* 2.5 (0, 2, 2.5, 4, 5, 6, 7.5, 8, 10, 12, 12.5 …), because machine stacks
   come in both and one fixed step always missed half the pins. It's derived, so it has no ceiling, and
@@ -146,8 +150,14 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.
 
 **Views**: `viewHome` (session picker) → `viewSession` (warm-up → exercises → save) → `viewHistory`
-(calendar / list tabs, plus JSON import/export and `.ics` export), plus `viewPlans` (switch / create /
+(calendar / list / progress tabs, plus JSON import/export and `.ics` export), plus `viewPlans` (switch / create /
 share / duplicate / delete), `viewEditor` (edit `state.draft`) and `viewImport` (preview a shared link).
+`exerciseStats()` aggregates history by exercise **name**, for the same reason `lastTime()` does — a lift
+keeps its line when it moves between plans, and renaming it starts a fresh one. Its bar chart is indexed
+to each lift's own min/max rather than to zero, because working weights cluster near the top and a real
+climb would otherwise render as a flat wall; the first/latest/best numbers under it carry the absolute
+values. A lift whose sets are all bodyweight tracks reps instead of weight (`byW`).
+
 `buildICS()` is the only way a web page can push into a real calendar app; it hand-rolls RFC 5545 line
 folding (`fold()`) and escaping (`icsEsc()`).
 

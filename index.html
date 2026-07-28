@@ -241,6 +241,23 @@
         font-size:14px;font-weight:700;text-align:left;color:var(--gold);}
   .dbtn:active{background:var(--surface-hi);}
 
+  /* ---------- progress ---------- */
+  .prog{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+        padding:14px;margin-bottom:12px;}
+  .prog-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .prog-name{font-size:15px;font-weight:800;letter-spacing:-.01em;}
+  .tr{flex-shrink:0;font-size:12px;font-weight:800;color:var(--muted);}
+  .tr.up{color:var(--green);}
+  .tr.down{color:var(--red);}
+  .prog-bars{display:flex;align-items:flex-end;gap:3px;height:44px;margin:12px 0 10px;}
+  .prog-bars i{flex:1;min-width:3px;background:var(--blue);border-radius:2px;opacity:.55;}
+  .prog-bars i:last-child{opacity:1;background:var(--gold);}
+  .prog-grid{display:flex;gap:8px;text-align:center;}
+  .prog-grid div{flex:1;background:var(--ink);border-radius:8px;padding:8px 4px;}
+  .prog-grid b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .prog-grid span{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .prog-avg{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5;}
+
   /* ---------- plans ---------- */
   .plan{background:var(--surface);border:1px solid var(--line);border-radius:12px;
         padding:14px;margin-bottom:12px;}
@@ -653,6 +670,16 @@ function lastTime(name){
   }
   return null;
 }
+
+/* the same set number from the last session that logged this exercise.
+   No clamping — if last time had fewer sets, there is no match for this one. */
+function prevSet(name, n){
+  const p = lastTime(name);
+  return (p && p.sets[n-1]) || null;
+}
+
+const round1 = n => Math.round((Number(n)||0) * 10) / 10;
+const setLabel = s => (Number(s.w) ? round1(s.w)+"×"+s.r : "BW×"+s.r);
 
 function volume(entries){
   let v=0;
@@ -1341,10 +1368,15 @@ function openSheet(n){
   const existing = cur[n-1];
   let w, r;
   if(existing){ w=existing.w; r=existing.r; }
-  else if(cur.length){ w=cur[cur.length-1].w; r=cur[cur.length-1].r; }
   else {
-    const prev = lastTime(ex.name);
-    if(prev){ w=prev.sets[Math.min(n-1,prev.sets.length-1)].w; r=prev.sets[Math.min(n-1,prev.sets.length-1)].r; }
+    /* Set n opens on what set n was last time — the number to beat. It wins
+       over today's earlier sets deliberately: the point is to see last
+       session's figure every time, even after you've moved up today. */
+    const p = prevSet(ex.name, n);
+    if(p){ w=p.w; r=p.r; }
+    /* last time had fewer sets than this — today's own last set is the
+       better guess than anything in history */
+    else if(cur.length){ w=cur[cur.length-1].w; r=cur[cur.length-1].r; }
     else { w=0; r=ex.lo; }
   }
   sheet = { set:n, w, r };
@@ -1642,8 +1674,9 @@ function histChrome(inner){
     </div><div class="steps"></div></div>
     <div class="wrap">
       <div class="tabs">
-        <button class="tab ${state.tab!=="list"?"on":""}" id="tabCal">Calendar</button>
+        <button class="tab ${state.tab!=="list"&&state.tab!=="prog"?"on":""}" id="tabCal">Calendar</button>
         <button class="tab ${state.tab==="list"?"on":""}" id="tabList">List</button>
+        <button class="tab ${state.tab==="prog"?"on":""}" id="tabProg">Progress</button>
       </div>
       ${inner}
     </div>`;
@@ -1654,7 +1687,9 @@ function viewHistory(){
     return histChrome(`<div class="empty">Nothing logged yet.<br>Finish a session and save it to start building history.</div>`
       + dataPanel());
   }
-  return histChrome(state.tab==="list" ? histList() : histCal());
+  return histChrome(state.tab==="list" ? histList()
+                  : state.tab==="prog" ? progList()
+                  : histCal());
 }
 
 function dataPanel(){
@@ -1685,6 +1720,86 @@ function histList(){
   }).join("");
   return cards + dataPanel()
     + `<button class="ghost" id="wipe" style="color:var(--red);border-color:rgba(224,96,90,.4);">Delete all history</button>`;
+}
+
+/* Per-exercise progression, aggregated by exercise NAME across every plan —
+   the same reason lastTime() matches on name: renaming a lift starts a fresh
+   line, moving it between plans doesn't. Entries can arrive from an imported
+   file, so nothing in here trusts its shape. */
+function exerciseStats(){
+  const map = {};
+  state.log.forEach(rec=>{
+    const entries = rec && rec.entries;
+    if(!entries || typeof entries !== "object") return;
+    Object.keys(entries).forEach(name=>{
+      const raw = entries[name];
+      if(!Array.isArray(raw) || !raw.length) return;
+      const sets = raw.filter(s => s && typeof s === "object")
+                      .map(s => ({ w: Number(s.w) || 0, r: Number(s.r) || 0 }));
+      if(!sets.length) return;
+      const better = (a,b) => a.w > b.w || (a.w === b.w && a.r > b.r);
+      const top = sets.reduce((t,s)=> better(s,t) ? s : t, sets[0]);
+      const m = map[name] || (map[name] = { name, sessions:[] });
+      m.sessions.push({ day: recDay(rec), sets, top });
+    });
+  });
+
+  return Object.keys(map).map(k=>{
+    const m = map[k];
+    m.sessions.sort((a,b)=> a.day < b.day ? -1 : a.day > b.day ? 1 : 0);
+    const all = m.sessions.reduce((a,s)=> a.concat(s.sets), []);
+    m.count  = m.sessions.length;
+    m.setsN  = all.length;
+    m.avgW   = all.reduce((t,s)=> t+s.w, 0) / all.length;
+    m.avgR   = all.reduce((t,s)=> t+s.r, 0) / all.length;
+    m.best   = all.reduce((b,s)=> (s.w > b.w || (s.w === b.w && s.r > b.r)) ? s : b, all[0]);
+    m.first  = m.sessions[0].top;
+    m.latest = m.sessions[m.count-1].top;
+    m.lastDay = m.sessions[m.count-1].day;
+    /* bodyweight movements have nothing to plot on the weight axis, so they
+       track reps instead */
+    m.byW = m.sessions.some(s => s.top.w > 0);
+    return m;
+  }).sort((a,b)=> a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : 0);
+}
+
+function progList(){
+  const stats = exerciseStats();
+  if(!stats.length) return `<div class="empty">Nothing to compare yet.</div>` + dataPanel();
+
+  const cards = stats.map(m=>{
+    const val  = t => m.byW ? t.w : t.r;
+    const unit = m.byW ? state.units : "reps";
+    const series = m.sessions.slice(-12);
+    const vals = series.map(s=>val(s.top));
+    const max = Math.max(...vals), min = Math.min(...vals), span = max - min;
+    /* indexed to the range, not to zero — working weights cluster near the
+       top, so a real 40 -> 50 climb would otherwise render as a flat wall.
+       The first/latest/best figures underneath carry the absolute truth. */
+    const bars = vals.map(v=>
+      `<i style="height:${span ? 30 + Math.round((v-min)/span*70) : 100}%"></i>`).join("");
+
+    const d = val(m.latest) - val(m.first);
+    const pct = val(m.first) ? Math.round(d / val(m.first) * 100) : null;
+    const trend = m.count < 2
+      ? `<span class="tr flat">first session</span>`
+      : `<span class="tr ${d>0?"up":d<0?"down":"flat"}">${d>0?"▲ +":d<0?"▼ ":"– "}${round1(Math.abs(d))} ${esc(unit)}${
+          pct !== null && d !== 0 ? " · "+(d>0?"+":"−")+Math.abs(pct)+"%" : ""}</span>`;
+
+    return `<div class="prog">
+      <div class="prog-top"><div class="prog-name">${esc(m.name)}</div>${trend}</div>
+      <div class="prog-bars">${bars}</div>
+      <div class="prog-grid">
+        <div><b>${round1(val(m.first))}</b><span>first</span></div>
+        <div><b>${round1(val(m.latest))}</b><span>latest</span></div>
+        <div><b>${esc(setLabel(m.best))}</b><span>best set</span></div>
+      </div>
+      <div class="prog-avg">${m.count} session${m.count>1?"s":""} · ${m.setsN} sets ·
+        avg ${m.byW ? round1(m.avgW)+" "+esc(state.units)+" × " : ""}${round1(m.avgR)} reps</div>
+    </div>`;
+  }).join("");
+
+  return cards + dataPanel();
 }
 
 function histCal(){
@@ -1793,9 +1908,12 @@ function viewSession(){
     const setBtns = Array.from({length:ex.sets},(_,n)=>{
       const v = arr[n];
       const open = sheet && sheet.set===n+1;
+      /* an unlogged set advertises what it was last time, so you can see the
+         target without opening the sheet */
+      const p = v ? null : prevSet(ex.name, n+1);
       return `<button class="set ${v?"done":""} ${open?"active":""}" data-set="${n+1}">
-        <span class="n">${v ? (v.w ? v.w+"×"+v.r : "BW×"+v.r) : (n+1)}</span>
-        <span class="l">${v ? "set "+(n+1) : "set "+(n+1)}</span></button>`;
+        <span class="n">${v ? setLabel(v) : (n+1)}</span>
+        <span class="l">${v ? "set "+(n+1) : (p ? "last "+setLabel(p) : "set "+(n+1))}</span></button>`;
     }).join("");
 
     const a=linkFor(ex.name, ex.vid);
@@ -1895,6 +2013,7 @@ function wire(){
   on("saveW", saveWorkout);
   on("tabCal",  ()=>{ state.tab="cal";  save(); render(); });
   on("tabList", ()=>{ state.tab="list"; state.selDay=null; save(); render(); });
+  on("tabProg", ()=>{ state.tab="prog"; state.selDay=null; save(); render(); });
   on("moPrev",  ()=>{ state.calOff=(state.calOff||0)-1; state.selDay=null; save(); render(); });
   on("moNext",  ()=>{ state.calOff=Math.min(0,(state.calOff||0)+1); state.selDay=null; save(); render(); });
   on("ics", exportICS);

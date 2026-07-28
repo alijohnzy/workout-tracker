@@ -37,8 +37,10 @@ nothing uploaded. A 20-exercise plan with every coaching field filled comes to a
 it pastes into any chat. Whoever opens it gets a preview and chooses whether to save it; it's added
 alongside their plans and never touches their history.
 
-**History.** A calendar and a list view, colour-coded upper/lower, with per-workout volume totals and
-your average gap between training days. Export everything to JSON, import it back on another device, or
+**History.** Calendar, list and progress views. Progress gives every lift a card: times trained, best
+set, average weight and reps, how far you've come from your first session, and a bar chart of your top
+set each time. Bodyweight movements track reps instead of weight. The calendar is colour-coded
+upper/lower with per-workout volume totals and your average gap between training days. Export everything to JSON, import it back on another device, or
 export an `.ics` to push your workouts into a real calendar app.
 
 **Your data stays yours.** Everything lives in IndexedDB on your device. There is no backend to talk to,

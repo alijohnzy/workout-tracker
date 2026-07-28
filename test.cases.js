@@ -180,6 +180,101 @@ ok("keeps logs from unknown plans", m1.added === 1);
 ok("still dedupes", mergeLog([{ date:"2026-07-03T10:00:00Z", session:"someone-elses", entries:{ X:[{ w:1, r:1 }] } }]).dupes === 1);
 ok("rejects malformed records", mergeLog([{ date:"x" }, null, {}]).bad === 3);
 
+
+/* ---------- per-set prefill from the matching set last session ---------- */
+state.plans = {}; state.planId = "builtin"; state.live = {}; sheet = null;
+state.log = [{ id:"h1", date:"2026-07-01T10:00:00Z", day:"2026-07-01", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin",
+               entries:{ "Lat Pulldown":[{w:50,r:10},{w:55,r:9},{w:60,r:8}] } }];
+state.view = "session"; state.session = "upperA"; state.idx = 2;   // Lat Pulldown
+ok("prevSet reads the matching set", prevSet("Lat Pulldown",2).w === 55);
+ok("prevSet does not clamp past the end", prevSet("Lat Pulldown",9) === null);
+ok("prevSet is null for an unknown lift", prevSet("Nothing Here",1) === null);
+
+openSheet(1); ok("set 1 prefills from last session set 1", sheet.w === 50 && sheet.r === 10);
+openSheet(2); ok("set 2 prefills from last session set 2", sheet.w === 55 && sheet.r === 9);
+openSheet(3); ok("set 3 prefills from last session set 3", sheet.w === 60 && sheet.r === 8);
+
+/* moving up today must NOT drag later sets along */
+sheet = { set:1, w:70, r:10 }; logSet(); clearRest();
+openSheet(2);
+ok("today's step-up does not override set 2's history", sheet.w === 55 && sheet.r === 9,
+   sheet.w + "x" + sheet.r);
+openSheet(1);
+ok("re-opening a logged set shows what was logged", sheet.w === 70 && sheet.r === 10);
+
+/* when last time had fewer sets, fall back to today's last set */
+state.log = [{ id:"h2", date:"2026-07-02T10:00:00Z", day:"2026-07-02", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin",
+               entries:{ "Lat Pulldown":[{w:40,r:12}] } }];
+state.live = {}; sheet = { set:1, w:44, r:11 }; logSet(); clearRest();
+openSheet(2);
+ok("falls back to today when history is shorter", sheet.w === 44 && sheet.r === 11,
+   sheet.w + "x" + sheet.r);
+state.live = {}; sheet = null;
+
+/* no history at all -> the exercise's own starting reps */
+state.log = [];
+openSheet(1);
+ok("no history uses the exercise default", sheet.w === 0 && sheet.r === sess("upperA").ex[1].lo);
+sheet = null;
+
+/* the set button advertises last session's figure */
+state.log = [{ id:"h3", date:"2026-07-03T10:00:00Z", day:"2026-07-03", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin",
+               entries:{ "Lat Pulldown":[{w:50,r:10},{w:55,r:9},{w:60,r:8}] } }];
+state.live = {};
+const sv = viewSession();
+ok("unlogged set buttons show last time's numbers",
+   sv.includes("last 50×10") && sv.includes("last 55×9") && sv.includes("last 60×8"));
+
+/* ---------- progress stats ---------- */
+state.log = [
+  { id:"p1", date:"2026-07-01T10:00:00Z", day:"2026-07-01", session:"upperA", name:"Upper A",
+    kind:"upper", planId:"builtin", entries:{ "Bench":[{w:50,r:10},{w:50,r:8}], "Pull-up":[{w:0,r:6}] } },
+  { id:"p2", date:"2026-07-08T10:00:00Z", day:"2026-07-08", session:"upperA", name:"Upper A",
+    kind:"upper", planId:"builtin", entries:{ "Bench":[{w:60,r:10},{w:60,r:9}], "Pull-up":[{w:0,r:9}] } }
+];
+const st = exerciseStats();
+const bench = st.find(m => m.name === "Bench");
+const pull  = st.find(m => m.name === "Pull-up");
+ok("stats group by exercise name", st.length === 2);
+ok("sessions counted", bench.count === 2 && bench.setsN === 4);
+ok("top set per session picked by weight", bench.first.w === 50 && bench.latest.w === 60);
+ok("best set found", bench.best.w === 60 && bench.best.r === 10);
+ok("average weight", round1(bench.avgW) === 55, String(round1(bench.avgW)));
+ok("average reps", bench.avgR === 9.25, String(bench.avgR));
+ok("averages round to one decimal for display", round1(bench.avgR) === 9.3, String(round1(bench.avgR)));
+ok("weighted lift tracks weight", bench.byW === true);
+ok("bodyweight lift tracks reps instead", pull.byW === false);
+ok("bodyweight progression still measured", pull.first.r === 6 && pull.latest.r === 9);
+ok("most recent exercise sorts first", st[0].lastDay === "2026-07-08");
+
+const pv = draw("progress tab", progList);
+ok("progress shows the exercise", pv.includes("Bench"));
+ok("progress shows a gain", pv.includes("▲"), pv.includes("▲") ? "" : "no up arrow");
+ok("progress draws one bar per session per exercise",
+   (pv.match(/<i style="height:/g) || []).length === 4,
+   String((pv.match(/<i style="height:/g) || []).length));
+ok("progress shows averages", pv.includes("avg 55"));
+ok("bodyweight lift omits the 0 lb average", !pv.includes("avg 0 "), "");
+ok("bars are indexed to the range, not to zero",
+   pv.includes('height:30%') && pv.includes('height:100%'));
+
+/* a single session must not divide by zero or claim a trend */
+state.log = [state.log[0]];
+const one = progList();
+ok("single session reports no trend yet", one.includes("first session"));
+
+/* malformed imported entries must not break the view */
+state.log = [{ id:"bad", date:"2026-07-09T10:00:00Z", day:"2026-07-09", session:"x",
+               entries:{ "Weird":"not an array", "Empty":[], "Partial":[{w:"20",r:"5"},null] } }];
+const badv = draw("progress with malformed entries", progList);
+const bs = exerciseStats();
+ok("malformed entries skipped", bs.length === 1 && bs[0].name === "Partial", JSON.stringify(bs.map(x=>x.name)));
+ok("string numbers coerced", bs[0].best.w === 20 && bs[0].best.r === 5);
+state.log = [];
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");
