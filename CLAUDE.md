@@ -150,7 +150,9 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.
 
 **Views**: `viewHome` (session picker) → `viewSession` (warm-up → exercises → save) → `viewHistory`
-(calendar / list / progress tabs, plus JSON import/export and `.ics` export), plus `viewPlans` (switch / create /
+(calendar / list / progress tabs, plus `dataPanel()` — a `<details>` that is **collapsed by default**
+and holds JSON import/export, `.ics` export and the history wipe, because they're rare and two of them
+are destructive; don't promote any of them back out to a loose button), plus `viewPlans` (switch / create /
 share / duplicate / delete), `viewEditor` (edit `state.draft`) and `viewImport` (preview a shared link).
 `exerciseStats()` aggregates history by exercise **name**, for the same reason `lastTime()` does — a lift
 keeps its line when it moves between plans, and renaming it starts a fresh one. Its bar chart is indexed

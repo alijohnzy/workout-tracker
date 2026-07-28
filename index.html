@@ -235,8 +235,14 @@
   .ics-note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5;}
 
   .data{margin-top:22px;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
-  .data-head{padding:11px 14px;background:var(--surface-hi);font-size:11px;font-weight:800;
-             letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+  .data-head{padding:14px;background:var(--surface-hi);font-size:11px;font-weight:800;
+             letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+             list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
+  .data-head::-webkit-details-marker{display:none;}
+  .data-head::after{content:"+";font-size:17px;letter-spacing:0;}
+  .data[open] .data-head::after{content:"−";}
+  .data-body .ics-note{padding:12px 14px 0;margin-top:0;}
+  .dbtn.danger{color:var(--red);margin-top:14px;}
   .dbtn{display:block;width:100%;padding:15px;background:var(--surface);border-top:1px solid var(--line);
         font-size:14px;font-weight:700;text-align:left;color:var(--gold);}
   .dbtn:active{background:var(--surface-hi);}
@@ -1692,21 +1698,27 @@ function viewHistory(){
                   : histCal());
 }
 
+/* Collapsed by default, and the wipe lives inside it. These are rare tools —
+   two of them destructive — and they used to sit one stray tap below the
+   workout list. */
 function dataPanel(){
-  return `<div class="data">
-      <div class="data-head">Data</div>
-      <button class="dbtn" id="expJson">Export logs (.json)</button>
-      <button class="dbtn" id="impJson">Import logs</button>
-      <button class="dbtn" id="ics">Add to calendar (.ics)</button>
-    </div>
-    <div class="ics-note">
-      Export writes a JSON file of every workout. Import merges it in — nothing on this
-      device gets overwritten, and repeat imports skip what's already here.
-    </div>
-    <div class="ics-note">
-      Storage: ${esc(STORE_LABEL[DB.mode])}<br>
-      Zone: ${esc(T.zone())} · dates via ${HAS_TEMPORAL?"Temporal":"Date fallback"}
-    </div>`;
+  return `<details class="data">
+      <summary class="data-head">Data &amp; backup</summary>
+      <div class="data-body">
+        <button class="dbtn" id="expJson">Export logs (.json)</button>
+        <button class="dbtn" id="impJson">Import logs</button>
+        <button class="dbtn" id="ics">Add to calendar (.ics)</button>
+        <div class="ics-note">
+          Export writes a JSON file of every workout. Import merges it in — nothing on this
+          device gets overwritten, and repeat imports skip what's already here.
+        </div>
+        <div class="ics-note">
+          Storage: ${esc(STORE_LABEL[DB.mode])}<br>
+          Zone: ${esc(T.zone())} · dates via ${HAS_TEMPORAL?"Temporal":"Date fallback"}
+        </div>
+        <button class="dbtn danger" id="wipe">Delete all history</button>
+      </div>
+    </details>`;
 }
 
 function histList(){
@@ -1718,8 +1730,7 @@ function histList(){
         <div class="hist-vol">${volume(rec.entries).toLocaleString()} ${state.units}<br>total volume</div>
       </summary>${rows}</details>`;
   }).join("");
-  return cards + dataPanel()
-    + `<button class="ghost" id="wipe" style="color:var(--red);border-color:rgba(224,96,90,.4);">Delete all history</button>`;
+  return cards + dataPanel();
 }
 
 /* Per-exercise progression, aggregated by exercise NAME across every plan —

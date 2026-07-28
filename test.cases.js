@@ -275,6 +275,26 @@ ok("malformed entries skipped", bs.length === 1 && bs[0].name === "Partial", JSO
 ok("string numbers coerced", bs[0].best.w === 20 && bs[0].best.r === 5);
 state.log = [];
 
+/* ---------- data panel is collapsed and holds the destructive action ---------- */
+state.log = [{ id:"d1", date:"2026-07-20T10:00:00Z", day:"2026-07-20", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin",
+               entries:{ "Lat Pulldown":[{w:50,r:10}] } }];
+const dp = dataPanel();
+ok("data panel is a details element", dp.trimStart().startsWith("<details"));
+ok("data panel is closed by default", !/<details[^>]*\sopen/.test(dp));
+ok("wipe now lives inside the panel", dp.includes('id="wipe"'));
+ok("export/import/ics still inside", dp.includes('id="expJson"') && dp.includes('id="impJson"') && dp.includes('id="ics"'));
+
+for(const [tab, fn] of [["list", histList], ["prog", progList], ["cal", histCal]]){
+  state.tab = tab;
+  const h = fn();
+  ok(tab + " tab keeps the panel collapsed", !/<details class="data"[^>]*\sopen/.test(h));
+  ok(tab + " tab exposes no loose wipe button",
+     (h.match(/id="wipe"/g) || []).length === 1 && h.indexOf('id="wipe"') > h.indexOf('class="data"'));
+}
+state.tab = "list";
+ok("empty history still offers the panel", viewHistory.call(null) && (state.log = [], viewHistory().includes('id="expJson"')));
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");
