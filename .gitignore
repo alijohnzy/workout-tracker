@@ -1,2 +1,6 @@
 node_modules/
 .DS_Store
+
+# Source material — third-party, not ours to redistribute.
+# deploy.sh runs `git add -A`, so this guard is what keeps it out of the repo.
+*.pdf
