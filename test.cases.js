@@ -380,6 +380,70 @@ state.live[lk(ord[0],0)] = [{ w:5, r:5 }];
 ok("a half-finished session suppresses the suggestion", !viewHome().includes("Up next"));
 state.live = {}; state.log = [];
 
+/* ---------- exercise photos ---------- */
+ok("image search points at Google Images",
+   imgSearch("Lat Pulldown").startsWith("https://www.google.com/search?tbm=isch&q="));
+ok("image search encodes the exercise name",
+   imgSearch("45° Back Extension").includes(encodeURIComponent("45° Back Extension exercise proper form")));
+ok("image keys are namespaced", IMG_KEY("Squat") === "img:Squat");
+
+/* the memory-mode store must be keyed, or a photo overwrites the whole state */
+DB.mode = "memory"; DB.mem = {};
+await writeChain;                       // let queued save()s land first
+await storeSet("probe:state", "STATE"); await storeSet("img:Squat", "PHOTO");
+ok("memory store keeps keys apart",
+   (await storeGet("probe:state")) === "STATE" && (await storeGet("img:Squat")) === "PHOTO",
+   String(await storeGet("probe:state")).slice(0,20));
+ok("a photo write leaves other keys alone",
+   (await storeSet("img:Other", "X"), await storeGet("probe:state")) === "STATE");
+
+const px = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+await storeSet(IMG_KEY("Bench"), px);
+delete IMG["Bench"];
+ok("a stored photo loads back", (await loadImg("Bench")) === px);
+ok("a missing photo resolves to null", (await loadImg("Never Trained")) === null);
+ok("loadImg caches the miss", IMG["Never Trained"] === null);
+
+/* photos are keyed by name across plans, and never inside the state blob */
+ok("photos are not in the state blob", !JSON.stringify(state).includes("data:image"));
+
+state.planId = "builtin"; state.plans = {};
+const known = knownExercises();
+ok("known exercises include the built-in lifts", known.includes("Lat Pulldown"));
+state.log = [{ id:"i1", date:"2026-07-20T10:00:00Z", day:"2026-07-20", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin", entries:{ "Some Old Lift":[{w:1,r:1}] } }];
+ok("known exercises include lifts only in history", knownExercises().includes("Some Old Lift"));
+
+/* the exercise screen offers the search, and the photo once saved */
+state.view = "session"; state.session = "upperA"; state.idx = 2; state.live = {}; sheet = null;
+const noPic = viewSession();
+ok("exercise screen offers an image search", noPic.includes("Find an image"));
+ok("exercise screen offers to save a photo", noPic.includes("data-rephoto="));
+ok("no thumbnail when nothing is saved", !noPic.includes("data-shot="));
+IMG[sess("upperA").ex[1].name] = px;
+const withPic = viewSession();
+ok("a saved photo renders as a thumbnail", withPic.includes("data-shot=") && withPic.includes(px));
+ok("thumbnail starts collapsed", !withPic.includes('class="shot big"'));
+shotOpen = sess("upperA").ex[1].name;
+const bigPic = viewSession();
+ok("tapping enlarges the photo", bigPic.includes('class="shot big"'));
+ok("enlarged photo offers replace and remove",
+   bigPic.includes("data-rephoto=") && bigPic.includes("data-unshot="));
+shotOpen = null;
+delete IMG[sess("upperA").ex[1].name];
+
+/* imported image data is treated as hostile */
+const goodPic = { images: { "Bench": px } };
+const badPics = { images: { "A": "javascript:alert(1)", "B": "data:text/html;base64,xx",
+                            "C": "not a url", "D": "data:image/png;base64," + "x".repeat(IMG_CAP) } };
+const okPic = v => typeof v === "string" &&
+  /^data:image\/(png|jpeg|jpg|webp|gif);base64,/.test(v) && v.length <= IMG_CAP;
+ok("a real data URL passes the import filter", okPic(goodPic.images.Bench));
+ok("javascript: rejected", !okPic(badPics.images.A));
+ok("non-image data URL rejected", !okPic(badPics.images.B));
+ok("plain text rejected", !okPic(badPics.images.C));
+ok("oversized image rejected", !okPic(badPics.images.D));
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");

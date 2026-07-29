@@ -65,7 +65,8 @@ without migrating anyone's data. `state.plans` holds only user-authored plans.
 (the Claude preview sandbox) → in-memory. The whole `state` object is serialised to a single key
 (`wk-v2`). IndexedDB open is wrapped in `withTimeout()` because it hangs indefinitely in private browsing.
 Writes go through `writeChain`, a serialised promise chain, so rapid taps can't land out of order — always
-call `save()`, never `storeSet()` directly.
+call `save()`, never `storeSet()` directly. The store is genuinely keyed in all three modes; exercise
+photos rely on that, and the in-memory fallback used to be a single slot that ignored the key.
 
 **STATE** — one module-global `state = { v, view, session, idx, units, live, log, plans, planId, draft }`,
 persisted whole to the single `wk-v2` key.
@@ -114,6 +115,16 @@ gesture behind it). Four constraints shaped this and shouldn't be relitigated:
   — a late buzz beats a stopped playlist. Web Push was rejected too: it needs a server *and* a signal, and
   this app is built for a gym with neither. Late-on-unlock is the accepted behaviour, which is exactly why
   the ongoing notification names the target clock time — you can read it off the lock screen.
+
+**EXERCISE PHOTOS** — a form reminder that works in a basement: YouTube means ads and a signal you don't
+have, so each exercise can hold one photo, shown as a thumbnail that expands on tap. Three rules:
+- **Photos never go in the state blob.** They live under their own `img:<name>` storage keys, because
+  `save()` re-serialises all of `state` on every logged set.
+- Keyed by exercise **name**, like `lastTime()` and `exerciseStats()`, so a lift keeps its photo across plans.
+- Everything is downscaled through a canvas to 900px / JPEG 0.7 before storing (a phone camera file is
+  multiple MB). `render()` is synchronous, so `openSession()` fires `loadImgs()` and re-renders when the
+  cache fills. The JSON export carries them, which is why an export can run to megabytes; imported image
+  data is filtered to real `data:image/...;base64,` URLs under `IMG_CAP`.
 
 **SHARE** — a plan travels as a URL hash: `#p=<flag><base64url>`. `packPlan()` maps to short keys, then
 `deflate-raw` via `CompressionStream` (flag `z`), falling back to uncompressed bytes (flag `j`). A
@@ -191,6 +202,13 @@ folding (`fold()`) and escaping (`icsEsc()`).
 - Manifest `id` is pinned to `./index.html` (the value Chrome previously derived implicitly from
   `start_url`). Changing it makes Chrome treat the app as a brand-new install and orphan the one already on
   the user's home screen.
+
+## The source PDF
+
+The Built With Science PDF this project drew its warm-up from is **third-party paid material whose own
+disclaimer forbids reproduction or transmission in any form**. It is gitignored (`*.pdf`). It was once
+committed by accident — `deploy.sh` runs `git add -A` — and served publicly from GitHub Pages before
+being removed. Keep it out of the repo, and never paste its text wholesale into the source.
 
 ## Conventions
 

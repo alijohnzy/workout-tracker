@@ -22,7 +22,10 @@ Open it once while online so the offline cache fills. After that it works with t
 **Train.** The day after your last one is marked *Up next*. Work through a warm-up, one exercise per
 screen, then a cool-down. Abandoned a session? Discard it from the home screen in one tap. Each exercise shows its
 target sets and reps, what doing it right feels like, the common way to get it wrong, and a coaching cue.
-Log a set and a rest timer starts on its own.
+Log a set and a rest timer starts on its own. Each exercise also links straight to a Google Images
+search, and you can save one photo per lift — from your gallery or the camera — which is stored on the
+device and shown as a thumbnail next session. Handy for photographing a machine's actual seat and pin
+setting, and it works with no signal.
 
 **Rest timer that doesn't lie.** The countdown is a deadline, not a tick count, so it stays accurate even
 when your phone throttles or freezes the page. Optional notifications (off by default) put the target

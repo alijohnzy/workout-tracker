@@ -254,6 +254,19 @@
         font-size:14px;font-weight:700;text-align:left;color:var(--gold);}
   .dbtn:active{background:var(--surface-hi);}
 
+  /* ---------- exercise photo ---------- */
+  .shots{margin:14px 0 4px;}
+  .shot{display:block;width:100%;padding:0;border-radius:12px;overflow:hidden;
+        border:1px solid var(--line);background:var(--surface);}
+  .shot img{display:block;width:100%;height:92px;object-fit:cover;}
+  .shot.big img{height:auto;max-height:66vh;object-fit:contain;background:#000;}
+  .shot-acts{display:flex;gap:8px;margin-top:6px;}
+  .shot-act{flex:1;padding:9px;border-radius:8px;background:var(--surface);border:1px solid var(--line);
+            font-size:13px;font-weight:700;color:var(--muted);}
+  .shot-act.drop{color:var(--red);border-color:rgba(224,96,90,.35);}
+  .addshot{margin:14px 0 4px;font-size:13px;}
+  .vid.pic .play{font-size:13px;}
+
   /* ---------- progress ---------- */
   .prog{background:var(--surface);border:1px solid var(--line);border-radius:12px;
         padding:14px;margin-bottom:12px;}
@@ -527,7 +540,9 @@ const newId = pre => pre + Math.random().toString(36).slice(2,8) + (idSeq++).toS
    window.storage (the Claude preview sandbox), then memory.
    ============================================================ */
 const KEY = "wk-v2";
-const DB = { mode:"memory", db:null, mem:null };
+/* mem is a MAP, not a single slot — once photos got their own keys, a
+   one-value fallback would have let an image clobber the whole state. */
+const DB = { mode:"memory", db:null, mem:{} };
 
 function withTimeout(p, ms, label){
   return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error(label)), ms))]);
@@ -564,12 +579,12 @@ function idbSet(db,k,v){
 async function storeGet(k){
   if(DB.mode==="idb")     return await idbGet(DB.db,k);
   if(DB.mode==="storage"){ const r = await window.storage.get(k); return r && r.value; }
-  return DB.mem;
+  return DB.mem[k];
 }
 async function storeSet(k,v){
   if(DB.mode==="idb")     return await idbSet(DB.db,k,v);
   if(DB.mode==="storage") return await window.storage.set(k,v);
-  DB.mem = v;
+  DB.mem[k] = v;
 }
 
 const STORE_LABEL = {
@@ -844,14 +859,23 @@ function download(name, text, mime){
   }catch(e){ return false; }
 }
 
-function exportJSON(){
+async function exportJSON(){
   const mine = Object.values(state.plans);
   if(!state.log.length && !mine.length){ alert("Nothing logged or created yet."); return; }
+  /* photos ride along — this is the only path off the device, and losing your
+     form references on a phone swap would be a nasty surprise. They dominate
+     the file size, so they're the reason an export can run to megabytes. */
+  const images = {};
+  await Promise.all(knownExercises().map(async n=>{
+    const v = await loadImg(n);
+    if(v) images[n] = v;
+  }));
   const payload = JSON.stringify({
-    format:"4dayplan-log", version:2,
+    format:"4dayplan-log", version:3,
     exported:new Date().toISOString(), zone:T.zone(),
     units:state.units, log:state.log,
-    plans: mine.map(packPlan)      // backup path; links are the sharing path
+    plans: mine.map(packPlan),     // backup path; links are the sharing path
+    images
   }, null, 2);
   const stamp = T.today();
   if(!download("workout-log-"+stamp+".json", payload, "application/json"))
@@ -903,9 +927,22 @@ function importJSON(file){
       state.plans[p.id] = p; plans++;
     });
 
+    /* same posture as everything else off-device: only obvious image data
+       gets through, capped so one file can't fill the origin's quota */
+    let pics = 0;
+    if(data.images && typeof data.images === "object"){
+      Object.keys(data.images).slice(0, 200).forEach(n=>{
+        const v = data.images[n];
+        if(typeof n !== "string" || !n || typeof v !== "string") return;
+        if(!/^data:image\/(png|jpeg|jpg|webp|gif);base64,/.test(v) || v.length > IMG_CAP) return;
+        IMG[n] = v; storeSet(IMG_KEY(n), v); pics++;
+      });
+    }
+
     save();
     state.view="history"; state.tab="list"; render();
     alert("Imported "+r.added+" workout"+(r.added===1?"":"s")+"."
+      + (pics      ? "\nRestored "+pics+" form photo"+(pics===1?"":"s")+"." : "")
       + (plans     ? "\nAdded "+plans+" plan"+(plans===1?"":"s")+"." : "")
       + (r.dupes ? "\nSkipped "+r.dupes+" already on this device." : "")
       + (r.bad   ? "\nSkipped "+r.bad+" unreadable entries." : ""));
@@ -919,6 +956,103 @@ function pickImport(){
   inp.type="file"; inp.accept="application/json,.json";
   inp.onchange = () => { if(inp.files && inp.files[0]) importJSON(inp.files[0]); };
   inp.click();
+}
+
+/* ============================================================
+   EXERCISE PHOTOS
+
+   A form reminder you can actually read mid-set: YouTube in a gym means ads
+   and a signal you don't have. Photos live under their own storage keys and
+   NEVER inside the state blob — save() re-serialises all of state on every
+   logged set, and a few hundred KB of base64 in there would make that crawl.
+
+   Keyed by exercise NAME, like lastTime() and exerciseStats(), so a lift keeps
+   its photo when it moves between plans.
+   ============================================================ */
+const IMG_KEY = n => "img:" + n;
+const IMG = {};              // name -> dataURL | null (null = looked, none there)
+const IMG_MAX = 900;         // px on the long edge
+const IMG_Q = 0.7;
+const IMG_CAP = 2e6;         // refuse anything absurd arriving from an import
+let shotOpen = null;         // which photo is enlarged; transient like `sheet`
+
+const imgSearch = n =>
+  "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(n + " exercise proper form");
+
+async function loadImg(name){
+  if(IMG[name] !== undefined) return IMG[name];
+  try{ IMG[name] = (await storeGet(IMG_KEY(name))) || null; }
+  catch(e){ IMG[name] = null; }
+  return IMG[name];
+}
+/* render() is synchronous, so a session's photos are fetched up front and the
+   view is drawn again once they land */
+async function loadImgs(sid){
+  const S = sess(sid);
+  if(!S) return;
+  await Promise.all(S.ex.map(e => loadImg(e.name)));
+}
+
+/* Downscaled before storing — phone cameras produce multi-megabyte files and
+   this shares an IndexedDB with everything else. */
+function shrinkImg(file){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("unreadable"));
+    fr.onload = () => {
+      const im = new Image();
+      im.onerror = () => rej(new Error("not an image"));
+      im.onload = () => {
+        const k = Math.min(1, IMG_MAX / Math.max(im.width, im.height) || 1);
+        const c = document.createElement("canvas");
+        c.width  = Math.max(1, Math.round(im.width  * k));
+        c.height = Math.max(1, Math.round(im.height * k));
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        try{ res(c.toDataURL("image/jpeg", IMG_Q)); }catch(e){ rej(e); }
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function pickPhoto(name){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";   // Android offers the camera here too
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    if(!f) return;
+    try{
+      const url = await shrinkImg(f);
+      IMG[name] = url;
+      await storeSet(IMG_KEY(name), url);
+      shotOpen = name;
+      render();
+    }catch(e){ alert("Couldn't read that image."); }
+  };
+  inp.click();
+}
+
+async function dropPhoto(name){
+  if(!confirm("Remove the saved photo for " + name + "?")) return;
+  IMG[name] = null;
+  shotOpen = null;
+  try{ await storeSet(IMG_KEY(name), ""); }catch(e){}
+  render();
+}
+
+/* Every exercise name this device knows about — lets the JSON backup gather
+   photos without enumerating storage keys. */
+function knownExercises(){
+  const names = new Set();
+  allPlans().forEach(p => p.order.forEach(sid=>{
+    const S = p.sessions[sid];
+    if(S) S.ex.forEach(e => names.add(e.name));
+  }));
+  state.log.forEach(r=>{
+    if(r && r.entries && typeof r.entries === "object") Object.keys(r.entries).forEach(n => names.add(n));
+  });
+  return [...names];
 }
 
 /* ============================================================
@@ -1380,8 +1514,10 @@ async function closeRestNote(){
    ACTIONS
    ============================================================ */
 function openSession(s){
-  state.view="session"; state.session=s; state.idx=0; sheet=null;
+  state.view="session"; state.session=s; state.idx=0; sheet=null; shotOpen=null;
   save(); keepAwake(); render();
+  /* render() is sync; redraw once the photos are in the cache */
+  loadImgs(s).then(render);
 }
 function home(){
   state.view="home"; state.session=null; sheet=null;
@@ -1771,8 +1907,9 @@ function dataPanel(){
         <button class="dbtn" id="impJson">Import logs</button>
         <button class="dbtn" id="ics">Add to calendar (.ics)</button>
         <div class="ics-note">
-          Export writes a JSON file of every workout. Import merges it in — nothing on this
-          device gets overwritten, and repeat imports skip what's already here.
+          Export writes a JSON file of every workout, your own plans and your saved form
+          photos. Import merges it in — nothing on this device gets overwritten, and repeat
+          imports skip what's already here. Photos make the file big; that's normal.
         </div>
         <div class="ics-note">
           Storage: ${esc(STORE_LABEL[DB.mode])}<br>
@@ -2006,6 +2143,19 @@ function viewSession(){
       vids += `<a class="vid ${b.vetted?"vetted":""}" href="${b.url}" target="_blank" rel="noopener">
         <span class="play">▶</span><span>${esc(ex.altVid)}</span>${b.vetted?"":`<span class="tag">search</span>`}</a>`;
     }
+    /* images beat video in a gym — no ads, no buffering, readable at a glance */
+    vids += `<a class="vid pic" href="${escA(imgSearch(ex.name))}" target="_blank" rel="noopener">
+        <span class="play">▤</span><span>Find an image</span></a>`;
+
+    const shot = IMG[ex.name];
+    const photo = shot
+      ? `<div class="shots">
+           <button class="shot ${shotOpen===ex.name?"big":""}" data-shot="${escA(ex.name)}"><img src="${escA(shot)}" alt=""></button>
+           ${shotOpen===ex.name ? `<div class="shot-acts">
+              <button class="shot-act" data-rephoto="${escA(ex.name)}">Replace</button>
+              <button class="shot-act drop" data-unshot="${escA(ex.name)}">Remove</button></div>` : ""}
+         </div>`
+      : `<button class="ghost addshot" data-rephoto="${escA(ex.name)}">+ Save a form photo for next time</button>`;
 
     const sheetHTML = sheet ? `<div class="sheet">
         <div class="sheet-head">
@@ -2028,6 +2178,7 @@ function viewSession(){
 
     body = `<h2 class="ex-name">${esc(ex.name)}</h2>
       ${ex.alt ? `<div class="ex-alt"><b>Or:</b> ${esc(ex.alt)}</div>` : ""}
+      ${photo}
       <div class="target">
         <div class="chip"><div class="eyebrow">Sets</div><div class="chip-val">${ex.sets}</div></div>
         <div class="chip"><div class="eyebrow">Reps</div><div class="chip-val">${esc(ex.reps)}</div></div>
@@ -2075,6 +2226,10 @@ function wire(){
 
   document.querySelectorAll("[data-open]").forEach(b=> b.onclick=()=>openSession(b.dataset.open));
   document.querySelectorAll("[data-drop]").forEach(b=> b.onclick=()=>discardSession(b.dataset.drop));
+  document.querySelectorAll("[data-shot]").forEach(b=>
+    b.onclick=()=>{ shotOpen = shotOpen===b.dataset.shot ? null : b.dataset.shot; render(); });
+  document.querySelectorAll("[data-rephoto]").forEach(b=> b.onclick=()=>pickPhoto(b.dataset.rephoto));
+  document.querySelectorAll("[data-unshot]").forEach(b=> b.onclick=()=>dropPhoto(b.dataset.unshot));
   document.querySelectorAll("[data-set]").forEach(b=> b.onclick=()=>openSheet(+b.dataset.set));
 
   document.querySelectorAll("[data-adj]").forEach(b=> b.onclick=()=>{
