@@ -295,6 +295,91 @@ for(const [tab, fn] of [["list", histList], ["prog", progList], ["cal", histCal]
 state.tab = "list";
 ok("empty history still offers the panel", viewHistory.call(null) && (state.log = [], viewHistory().includes('id="expJson"')));
 
+/* ---------- cool-down ---------- */
+ok("cool-down defaults exist per kind",
+   COOLDOWN.upper.length > 0 && COOLDOWN.lower.length > 0 && COOLDOWN.full.length > 0);
+ok("sessions inherit a cool-down by kind", cooldownFor({ kind:"lower" }) === COOLDOWN.lower);
+ok("unknown kind falls back to full cool-down", cooldownFor({ kind:"nope" }) === COOLDOWN.full);
+ok("an explicit cool-down wins",
+   cooldownFor({ kind:"lower", cooldown:["Bike 5 min"] })[0] === "Bike 5 min");
+ok("cool-down text is not attributed to the source",
+   !JSON.stringify(COOLDOWN).toLowerCase().includes("science"));
+
+const cdPlan = { id:"cd", name:"CD", order:["z"], sessions:{
+  z:{ name:"Day", kind:"upper", warmup:["Bike"], cooldown:["Quad stretch","Lat stretch"],
+      ex:[{ name:"Bench", sets:2, reps:"8", lo:8, rest:60 }] }}};
+const cdBack = await decPlan(await encPlan(cdPlan));
+ok("cool-down survives the share codec",
+   JSON.stringify(cdBack.sessions[cdBack.order[0]].cooldown) === JSON.stringify(["Quad stretch","Lat stretch"]));
+ok("warm-up and cool-down stay separate through the codec",
+   JSON.stringify(cdBack.sessions[cdBack.order[0]].warmup) === JSON.stringify(["Bike"]));
+const cdNone = await decPlan(await encPlan({ id:"n", name:"N", order:["z"], sessions:{
+  z:{ name:"D", kind:"upper", ex:[{ name:"B", sets:2, reps:"8", lo:8, rest:60 }] }}}));
+ok("no cool-down stays absent", cdNone.sessions[cdNone.order[0]].cooldown === undefined);
+const cdEvil = unpackPlan({ f:"wq", n:"E", o:["s"], s:{ s:{ n:"D", k:"upper",
+  c:["ok", "", 99, "z".repeat(999), ...Array.from({length:40},(_,i)=>"x"+i)],
+  e:[{ n:"B", x:2, r:"8", l:8, t:60 }] }}});
+ok("hostile cool-down lines capped and cleaned",
+   cdEvil.sessions[cdEvil.order[0]].cooldown.length <= 20 &&
+   cdEvil.sessions[cdEvil.order[0]].cooldown.every(t => t && t.length <= 400));
+
+/* the session gains a step: warm-up, n exercises, cool-down, save */
+state.plans = {}; state.planId = "builtin"; state.live = {}; sheet = null; state.log = [];
+state.view = "session"; state.session = "upperA";
+const nEx = sess("upperA").ex.length;
+state.idx = 0;      const vWarm = viewSession();
+state.idx = nEx+1;  const vCool = viewSession();
+state.idx = nEx+2;  const vDone = viewSession();
+ok("warm-up page still first", vWarm.includes("Warm-Up") && vWarm.includes("WARM-UP"));
+ok("cool-down page sits before save", vCool.includes("Cool-Down") && vCool.includes("COOL-DOWN"));
+ok("cool-down lists its steps", vCool.includes(COOLDOWN.upper[0]));
+ok("save page is now the last step", vDone.includes("Save workout to history"));
+ok("step dots count warm-up + exercises + cool-down",
+   (vWarm.match(/<i class=/g) || []).length === nEx + 2,
+   String((vWarm.match(/<i class=/g) || []).length));
+state.idx = nEx+2; go(1);
+ok("the cursor stops at the save page", state.idx === nEx+2, String(state.idx));
+
+/* ---------- discard an abandoned session ---------- */
+state.idx = 0; state.live = {}; state.session = "upperA";
+state.live[lk("upperA",0)] = [{ w:20, r:10 }];
+ok("an abandoned session shows the resume card", viewHome().includes("Pick up where you left off"));
+ok("the resume card offers a discard", viewHome().includes('data-drop="upperA"'));
+discardSession("upperA");
+ok("discarding clears that session's sets", Object.keys(state.live).length === 0);
+ok("discarding removes the resume card", !viewHome().includes("Pick up where you left off"));
+ok("discarding a missing session is a no-op", (discardSession("nope"), true));
+
+/* discarding must not touch other sessions or saved history */
+state.live[lk("upperA",0)] = [{ w:20, r:10 }];
+state.live[lk("lowerA",0)] = [{ w:30, r:10 }];
+state.log = [{ id:"k", date:"2026-07-20T10:00:00Z", day:"2026-07-20", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin", entries:{ X:[{w:1,r:1}] } }];
+discardSession("upperA");
+ok("discard leaves other sessions alone", !!state.live[lk("lowerA",0)]);
+ok("discard leaves history alone", state.log.length === 1);
+state.live = {};
+
+/* ---------- next workout ---------- */
+state.log = [];
+ok("with no history the first day is up next", nextSession() === order()[0]);
+const ord = order();
+state.log = [{ id:"n1", date:"2026-07-20T10:00:00Z", day:"2026-07-20", session:ord[0],
+               name:"x", kind:"upper", planId:"builtin", entries:{ X:[{w:1,r:1}] } }];
+ok("next follows the last logged day", nextSession() === ord[1], nextSession());
+state.log.push({ id:"n2", date:"2026-07-21T10:00:00Z", day:"2026-07-21", session:ord[ord.length-1],
+                 name:"x", kind:"lower", planId:"builtin", entries:{ X:[{w:1,r:1}] } });
+ok("next wraps around the end", nextSession() === ord[0], nextSession());
+state.log.push({ id:"n3", date:"2026-07-22T10:00:00Z", day:"2026-07-22", session:"from-another-plan",
+                 name:"x", kind:"upper", planId:"someone-else", entries:{ X:[{w:1,r:1}] } });
+ok("other plans' history is ignored", nextSession() === ord[0]);
+const hv = viewHome();
+ok("home marks the next day", hv.includes("Up next"));
+ok("only one day is marked", (hv.match(/Up next/g) || []).length === 1);
+state.live[lk(ord[0],0)] = [{ w:5, r:5 }];
+ok("a half-finished session suppresses the suggestion", !viewHome().includes("Up next"));
+state.live = {}; state.log = [];
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");

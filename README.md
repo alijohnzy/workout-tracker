@@ -19,7 +19,8 @@ Open it once while online so the offline cache fills. After that it works with t
 
 ## What it does
 
-**Train.** Pick a day, work through a warm-up and then one exercise per screen. Each exercise shows its
+**Train.** The day after your last one is marked *Up next*. Work through a warm-up, one exercise per
+screen, then a cool-down. Abandoned a session? Discard it from the home screen in one tap. Each exercise shows its
 target sets and reps, what doing it right feels like, the common way to get it wrong, and a coaching cue.
 Log a set and a rest timer starts on its own.
 
@@ -28,7 +29,7 @@ when your phone throttles or freezes the page. Optional notifications (off by de
 time on your lock screen and buzz when the rest ends.
 
 **Build your own plans.** The bundled 4-day upper/lower split is the read-only *Recommended* plan.
-Duplicate it, or start from scratch — name your sessions, write the warm-up, add exercises, set
+Duplicate it, or start from scratch — name your sessions, write the warm-up and cool-down, add exercises, set
 sets/reps/rest, and optionally add your own coaching notes and a YouTube demo. A session without its own
 warm-up inherits a sensible default for its upper/lower/full style.
 

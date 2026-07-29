@@ -41,7 +41,14 @@
   .home-sub{color:var(--muted);font-size:14px;margin-top:8px;}
   .streak{font-size:13px;color:var(--gold);font-weight:700;margin-top:10px;}
 
-  .resume{display:block;width:100%;text-align:left;background:var(--blue);border-radius:12px;padding:16px;margin-bottom:20px;}
+  .resume-wrap{margin-bottom:20px;}
+  .resume{display:block;width:100%;text-align:left;background:var(--blue);border-radius:12px;padding:16px;}
+  .resume-drop{display:block;width:100%;padding:10px;margin-top:6px;font-size:13px;font-weight:700;
+               color:var(--muted);text-align:center;}
+  .resume-drop:active{color:var(--red);}
+  .day.up{border-color:var(--blue);}
+  .up-next{display:inline-block;margin-bottom:6px;font-size:10px;font-weight:800;letter-spacing:.12em;
+           text-transform:uppercase;color:var(--blue);}
   .resume .eyebrow{color:rgba(255,255,255,.75);}
   .resume-name{font-size:20px;font-weight:800;text-transform:uppercase;margin-top:2px;}
   .resume-meta{font-size:13px;color:rgba(255,255,255,.8);margin-top:2px;}
@@ -338,12 +345,25 @@ const WARMUP = {
         "Bodyweight deep squat hold — 30 seconds",
         "First exercise only: 50% weight × 8, then 70% × 4"]
 };
+/* NOT from the Built With Science PDF — it has a warm-up routine and no
+   cool-down section at all. These are deliberately generic and unattributed;
+   don't credit them to the source, and don't invent BWS content here. */
+const COOLDOWN = {
+  upper:["Easy walking or cycling — 3 minutes","Doorway chest stretch — 30 seconds per side",
+         "Cross-body shoulder stretch — 30 seconds per side","Overhead lat stretch on a rack — 30 seconds per side"],
+  lower:["Easy walking or cycling — 3 minutes","Standing quad stretch — 30 seconds per side",
+         "Seated hamstring stretch — 30 seconds per side","Calf stretch against a wall — 30 seconds per side"],
+  full: ["Easy walking or cycling — 3 minutes","Doorway chest stretch — 30 seconds per side",
+         "Standing quad stretch — 30 seconds per side","Seated hamstring stretch — 30 seconds per side"]
+};
+
 const KINDS = ["upper","lower","full"];
 
 /* A session may carry its own warm-up; otherwise it inherits the one for its
    kind. Optional by design, so plans and shared links written before warm-ups
    were editable keep working untouched. */
-const warmupFor = S => (S && S.warmup && S.warmup.length) ? S.warmup : (WARMUP[S && S.kind] || WARMUP.full);
+const warmupFor   = S => (S && S.warmup   && S.warmup.length)   ? S.warmup   : (WARMUP[S && S.kind]   || WARMUP.full);
+const cooldownFor = S => (S && S.cooldown && S.cooldown.length) ? S.cooldown : (COOLDOWN[S && S.kind] || COOLDOWN.full);
 
 /* One set of each, first thing, while you're still fresh — small muscles that
    don't interfere with the leg work that follows. Shared by both lower days;
@@ -938,7 +958,8 @@ function packPlan(p){
       if(e.vid)    o.v  = e.vid;
       return o;
     })};
-    if(S.warmup && S.warmup.length) s[id].u = S.warmup;
+    if(S.warmup && S.warmup.length)   s[id].u = S.warmup;
+    if(S.cooldown && S.cooldown.length) s[id].c = S.cooldown;
   });
   return { f:"wq", v:1, n:p.name, o:p.order.filter(id=>p.sessions[id]), s };
 }
@@ -987,10 +1008,11 @@ function unpackPlan(d){
       kind: KINDS.includes(S.k) ? S.k : "full",
       ex
     };
-    if(Array.isArray(S.u)){
-      const wu = S.u.slice(0, WU_MAX).map(t => clampS(t, TXT_MAX).trim()).filter(Boolean);
-      if(wu.length) sessions[sid].warmup = wu;
-    }
+    [["u","warmup"],["c","cooldown"]].forEach(([k,field])=>{
+      if(!Array.isArray(S[k])) return;
+      const lines = S[k].slice(0, WU_MAX).map(t => clampS(t, TXT_MAX).trim()).filter(Boolean);
+      if(lines.length) sessions[sid][field] = lines;
+    });
     ord.push(sid);
   });
 
@@ -1078,7 +1100,8 @@ function usePlan(id){
 }
 
 const blankEx = () => ({ name:"", sets:3, reps:"8–12", lo:8, rest:90 });
-const blankSession = n => ({ name:n||"Day 1", kind:"full", warmup:[...WARMUP.full], ex:[blankEx()] });
+const blankSession = n => ({ name:n||"Day 1", kind:"full",
+                             warmup:[...WARMUP.full], cooldown:[...COOLDOWN.full], ex:[blankEx()] });
 
 function startDraft(p, srcId){
   const d = p ? JSON.parse(JSON.stringify(p)) : null;
@@ -1123,12 +1146,14 @@ function saveDraft(){
     if(!S) return;
     const ex = S.ex.filter(e => (e.name||"").trim());
     if(!ex.length) return;
-    const wu = (Array.isArray(S.warmup) ? S.warmup : String(S.warmup||"").split("\n"))
+    const lines = v => (Array.isArray(v) ? v : String(v||"").split("\n"))
       .map(t => String(t).trim().slice(0,TXT_MAX)).filter(Boolean).slice(0, WU_MAX);
+    const wu = lines(S.warmup), cd = lines(S.cooldown);
     sessions[sid] = {
       name:(S.name||"").trim() || "Session",
       kind: KINDS.includes(S.kind) ? S.kind : "full",
       ...(wu.length ? { warmup: wu } : {}),
+      ...(cd.length ? { cooldown: cd } : {}),
       ex: ex.map(e=>{
         const o = { name:e.name.trim(), sets:clampN(e.sets,1,20,3),
                     reps:(e.reps||"").trim() || "8–12",
@@ -1410,6 +1435,17 @@ function clearSet(n){
   state.live[k]=arr; sheet=null; save(); render();
 }
 
+/* An abandoned session otherwise leaves the resume card on the home screen
+   for good — there was no way to say "I'm not finishing that one". */
+function discardSession(sid){
+  const S = sess(sid);
+  if(!S) return;
+  if(!confirm("Discard the unsaved sets for "+S.name+"?\n\nWorkouts already saved to history aren't touched.")) return;
+  S.ex.forEach((_,i)=> delete state.live[lk(sid,i)]);
+  if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; }
+  sheet = null; clearRest(); save(); render();
+}
+
 function saveWorkout(){
   const s=state.session, S=sess(s);
   const entries={};
@@ -1432,8 +1468,22 @@ function saveWorkout(){
   state.view="home"; state.session=null; save(); render();
 }
 
+/* The day after the last one you logged on this plan, wrapping round. Falls
+   back to the first day when there's nothing logged yet. */
+function nextSession(){
+  const o = order();
+  if(!o.length) return null;
+  for(let i=state.log.length-1; i>=0; i--){
+    const r = state.log[i];
+    if(r.planId !== state.planId) continue;
+    const at = o.indexOf(r.session);
+    if(at >= 0) return o[(at+1) % o.length];
+  }
+  return o[0];
+}
+
 function go(d){
-  const max = sess(state.session).ex.length + 1;
+  const max = sess(state.session).ex.length + 2;
   state.idx = Math.max(0, Math.min(max, state.idx+d));
   sheet=null; save(); window.scrollTo(0,0); render();
 }
@@ -1470,19 +1520,26 @@ function viewHome(){
   let resume="";
   if(inProg){
     const p=sessionProgress(inProg);
-    resume = `<button class="resume" data-open="${escA(inProg)}">
-      <div class="eyebrow">Pick up where you left off</div>
-      <div class="resume-name">${esc(sess(inProg).name)}</div>
-      <div class="resume-meta">${p.got} of ${p.total} sets logged</div></button>`;
+    /* the discard sits outside the resume card — a button can't nest in a button */
+    resume = `<div class="resume-wrap">
+      <button class="resume" data-open="${escA(inProg)}">
+        <div class="eyebrow">Pick up where you left off</div>
+        <div class="resume-name">${esc(sess(inProg).name)}</div>
+        <div class="resume-meta">${p.got} of ${p.total} sets logged</div></button>
+      <button class="resume-drop" data-drop="${escA(inProg)}">Discard those sets</button>
+    </div>`;
   }
+  /* only suggest a day when nothing is half-finished */
+  const upNext = inProg ? null : nextSession();
 
   const cards = order().map(s=>{
     const S = sess(s);
     if(!S) return "";
     const p=sessionProgress(s);
     const prev = state.log.filter(x=>x.session===s && x.planId===state.planId).pop();
-    return `<button class="day" data-open="${escA(s)}">
+    return `<button class="day ${s===upNext?"up":""}" data-open="${escA(s)}">
       <div>
+        ${s===upNext ? `<span class="up-next">Up next</span>` : ""}
         <div class="day-name">${esc(S.name).replace(" ","<br>")}</div>
         <div class="day-meta">${prev ? "Last: "+T.fmtDay(recDay(prev)) : "Not logged yet"}</div>
       </div>
@@ -1664,6 +1721,11 @@ function viewEditor(){
       <div class="field ed-warm"><span class="eyebrow">Warm-up — one step per line</span>
         <textarea class="ed-in" rows="5" data-fld="swarm">${esc(
           Array.isArray(S.warmup) ? S.warmup.join("\n") : (S.warmup !== undefined ? S.warmup : warmupFor(S).join("\n"))
+        )}</textarea></div>
+
+      <div class="field ed-warm"><span class="eyebrow">Cool-down — one step per line</span>
+        <textarea class="ed-in" rows="5" data-fld="scool">${esc(
+          Array.isArray(S.cooldown) ? S.cooldown.join("\n") : (S.cooldown !== undefined ? S.cooldown : cooldownFor(S).join("\n"))
         )}</textarea></div>
 
       ${exs}
@@ -1878,12 +1940,14 @@ function viewSession(){
   const s=state.session, S=sess(s);
   /* the plan can be deleted from another tab while a session is open */
   if(!S){ state.view="home"; state.session=null; return viewHome(); }
-  const list=S.ex, last=list.length+1;
+  /* 0 warm-up · 1..n exercises · n+1 cool-down · n+2 save */
+  const list=S.ex, cool=list.length+1, last=list.length+2;
 
-  const steps = ["w",...list.map((_,i)=>i)].map((v,pos)=>{
+  const steps = ["w",...list.map((_,i)=>i),"c"].map((v,pos)=>{
     let c="";
     if(pos===state.idx) c="now";
     else if(pos===0) c="done";
+    else if(pos===cool) c = state.idx>cool ? "done" : "";
     else if(liveSets(s,pos-1).length >= list[pos-1].sets) c="done";
     return `<i class="${c}"></i>`;
   }).join("");
@@ -1895,6 +1959,13 @@ function viewSession(){
       <details class="form" open><summary>What to do</summary><div class="form-body">
         <ul class="wu">${warmupFor(S).map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
     nav = `<button class="prev" id="back">Exit</button><button class="next ready" id="next">Start lifting →</button>`;
+
+  } else if(state.idx===cool){
+    body = `<h2 class="ex-name">Cool-Down</h2><div class="ex-alt">About 5 minutes</div>
+      <details class="form" open><summary>What to do</summary><div class="form-body">
+        <ul class="wu">${cooldownFor(S).map(t=>`<li>${esc(t)}</li>`).join("")}</ul></div></details>`;
+    nav = `<button class="prev" id="prev">← Back</button>
+           <button class="next ready" id="next">Finish →</button>`;
 
   } else if(state.idx===last){
     const entries=[];
@@ -1981,7 +2052,7 @@ function viewSession(){
 
   return `<div class="topbar"><div class="topbar-row">
       <button class="back" id="back2">← All days</button>
-      <div class="counter">${state.idx===0?"WARM-UP":(state.idx===last?"COMPLETE":state.idx+" / "+list.length)}</div>
+      <div class="counter">${state.idx===0?"WARM-UP":state.idx===cool?"COOL-DOWN":state.idx===last?"COMPLETE":state.idx+" / "+list.length}</div>
     </div><div class="steps">${steps}</div></div>
     <div class="wrap">${body}<div class="nav">${nav}</div></div>`;
 }
@@ -2003,6 +2074,7 @@ function wire(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.onclick=fn; };
 
   document.querySelectorAll("[data-open]").forEach(b=> b.onclick=()=>openSession(b.dataset.open));
+  document.querySelectorAll("[data-drop]").forEach(b=> b.onclick=()=>discardSession(b.dataset.drop));
   document.querySelectorAll("[data-set]").forEach(b=> b.onclick=()=>openSheet(+b.dataset.set));
 
   document.querySelectorAll("[data-adj]").forEach(b=> b.onclick=()=>{
@@ -2068,6 +2140,7 @@ function wire(){
     else if(f==="sname") d.sessions[d.tab].name = el.value;
     else if(f==="skind") d.sessions[d.tab].kind = el.value;
     else if(f==="swarm") d.sessions[d.tab].warmup = el.value;
+    else if(f==="scool") d.sessions[d.tab].cooldown = el.value;
     else if(f==="ex"){
       const e = d.sessions[d.tab].ex[+el.dataset.i], k = el.dataset.k;
       e[k] = (k==="sets"||k==="rest"||k==="lo") ? (parseInt(el.value)||0) : el.value;

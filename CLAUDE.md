@@ -45,8 +45,11 @@ rsvg-convert -w 180 -h 180 icon-maskable.svg -o apple-touch-icon.png
 Science PDF. **Never invent a YouTube ID.** `linkFor()` deliberately degrades to a YouTube *search* URL
 for anything unlisted, and the UI marks the difference (`vetted`).
 
-Warm-ups hang off the **session**, not the kind: `session.warmup` is an optional array of steps and
-`warmupFor()` falls back to `WARMUP[kind]` when it's absent. Optional on purpose — plans and shared links
+Warm-ups and cool-downs hang off the **session**, not the kind: `session.warmup` / `session.cooldown` are
+optional arrays of steps and `warmupFor()` / `cooldownFor()` fall back to `WARMUP[kind]` / `COOLDOWN[kind]`
+when absent. **`COOLDOWN` is not from the Built With Science PDF** — that document has a warm-up routine
+and no cool-down section whatsoever, so the defaults are deliberately generic and unattributed. Don't
+credit them to the source or invent BWS cool-down content. Optional on purpose — plans and shared links
 written before warm-ups were editable keep working. `PROGRAM_V` / `PROGRAM_CHANGED` exist because
 `state.live` is keyed by exercise *index*: whenever the built-in programme's exercise order changes, bump
 `PROGRAM_V` or stale in-progress sets silently re-attach to whatever now sits at that position.
@@ -72,7 +75,8 @@ persisted whole to the single `wk-v2` key.
 - `state.log` is the committed history. `saveWorkout()` moves `live` → `log` and clears the scratchpad.
   Each record stores its own `kind` and `planId`, because the plan it came from can be deleted later and
   the calendar still has to paint — read it via `recKind()`, never by looking the session up in a plan.
-- `state.idx` is the session step cursor: `0` is the warm-up page, `1..n` are exercises, `n+1` is the save page.
+- `state.idx` is the session step cursor: `0` warm-up, `1..n` exercises, `n+1` cool-down, `n+2` save.
+  Adding or removing a step means updating `go()`'s max, the step-dot count, and the counter label together.
 - `state.draft` is the plan being edited, persisted so a half-written plan survives a reload the same way
   `state.live` protects a half-finished workout.
 - `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
@@ -148,6 +152,10 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
 - Editor text fields (`[data-fld]`) update `state.draft` on `oninput` and deliberately **do not** render;
   replacing `#app` mid-word drops the caret. Only structural edits re-render. Writes there go through
   `saveSoon()` so typing doesn't serialise the whole state per keystroke.
+
+`viewHome` marks the day after your last logged one as **Up next** (`nextSession()`, wrapping round the
+plan's order, ignoring other plans' history), and suppresses that hint while a session is half-finished.
+An abandoned session can be dropped with `discardSession()` — without it the resume card is permanent.
 
 **Views**: `viewHome` (session picker) → `viewSession` (warm-up → exercises → save) → `viewHistory`
 (calendar / list / progress tabs, plus `dataPanel()` — a `<details>` that is **collapsed by default**
