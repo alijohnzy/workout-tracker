@@ -55,7 +55,7 @@ written before warm-ups were editable keep working. `PROGRAM_V` / `PROGRAM_CHANG
 `PROGRAM_V` or stale in-progress sets silently re-attach to whatever now sits at that position.
 
 **PLANS** — `BUILTIN` wraps the consts above as the read-only "Recommended" plan. A plan is
-`{id, name, order:[…], sessions:{ id:{name, kind, warmup?, ex:[…]} }}` — deliberately the same shape `SESSIONS`
+`{id, name, order:[…], sessions:{ id:{name, kind, warmup?, cooldown?, ex:[…]} }}` — deliberately the same shape `SESSIONS`
 already had, so every exercise renderer works unchanged. Reach the active plan through the accessors
 `plan()`, `sess(id)`, `order()`, `allPlans()`; **never touch `SESSIONS`/`ORDER` directly** outside
 `BUILTIN`. `BUILTIN` is never written to storage, so a deploy can improve the recommended program
