@@ -444,6 +444,83 @@ ok("non-image data URL rejected", !okPic(badPics.images.B));
 ok("plain text rejected", !okPic(badPics.images.C));
 ok("oversized image rejected", !okPic(badPics.images.D));
 
+/* ---------- session length ---------- */
+ok("durations format readably",
+   fmtDur(0) === "" && fmtDur(30) === "<1 min" && fmtDur(60) === "1 min" &&
+   fmtDur(2700) === "45 min" && fmtDur(3600) === "1h 00m" && fmtDur(4500) === "1h 15m",
+   [fmtDur(30), fmtDur(2700), fmtDur(3600), fmtDur(4500)].join(" | "));
+
+state.plans = {}; state.planId = "builtin"; state.live = {}; state.log = []; sheet = null;
+NOW.v = 1800000000000;
+openSession("upperA");
+ok("opening a session stamps the clock", state.startedAt === NOW.v);
+sheet = { set:1, w:20, r:10 }; state.idx = 1; logSet(); clearRest();
+NOW.v += 47 * 60 * 1000;                       // 47 minutes of lifting
+saveWorkout();
+ok("the record carries a duration", state.log[0].dur === 47*60, String(state.log[0].dur));
+ok("saving clears the clock", state.startedAt === null);
+ok("history shows the length", histList().includes("47 min"));
+
+/* an abandoned tab must not be recorded as a marathon */
+state.log = []; state.live = {};
+openSession("upperA");
+sheet = { set:1, w:20, r:10 }; state.idx = 1; logSet(); clearRest();
+NOW.v += 9 * 3600 * 1000;                      // left open overnight
+saveWorkout();
+ok("an implausible span is dropped, not stored", state.log[0].dur === undefined, String(state.log[0].dur));
+ok("history simply omits it", !histList().includes("h 0"));
+
+/* records saved before this existed have no duration and must still render */
+state.log = [{ id:"old", date:"2026-07-01T10:00:00Z", day:"2026-07-01", session:"upperA",
+               name:"Upper A", kind:"upper", planId:"builtin", entries:{ "Lat Pulldown":[{w:50,r:10}] } }];
+ok("legacy records render without a duration", histList().includes("Upper A"));
+state.selDay = "2026-07-01"; state.calOff = 0;
+ok("calendar detail renders for legacy records", histCal().includes("Upper A"));
+state.selDay = null;
+discardSession("upperA");
+ok("discarding clears the clock too", state.startedAt === null);
+
+/* ---------- progress grouped by plan then day ---------- */
+state.plans = { mine:{ id:"mine", name:"My Split", order:["d1"], sessions:{
+  d1:{ name:"Push", kind:"upper", ex:[{ name:"Bench", sets:3, reps:"8", lo:8, rest:90 }] }}}};
+const mk = (day, pid, sid, nm, ent) => ({ id:pid+sid+day, date:day+"T10:00:00Z", day, session:sid,
+  name:nm, kind:"upper", planId:pid, entries:ent });
+state.log = [
+  mk("2026-07-01","builtin","upperA","Upper A",{ "Bench":[{w:50,r:10}] }),
+  mk("2026-07-05","builtin","upperA","Upper A",{ "Bench":[{w:60,r:10}] }),
+  mk("2026-07-03","builtin","lowerA","Lower A",{ "Squat":[{w:80,r:8}] }),
+  mk("2026-07-08","mine","d1","Push",{ "Bench":[{w:70,r:8}] }),
+  mk("2026-07-02","ghost-plan","gone","Old Day",{ "Row":[{w:40,r:12}] })
+];
+state.planId = "builtin";
+const G = progGroups();
+ok("groups are per plan", G.length === 3, String(G.length));
+ok("most recently trained plan sorts first", G[0].id === "mine", G[0].id);
+ok("a deleted plan is labelled, not dropped",
+   G.some(p => p.id === "ghost-plan" && p.gone && p.name === "Deleted plan"));
+const bi = G.find(p => p.id === "builtin");
+ok("plan session count is right", bi.n === 3, String(bi.n));
+ok("days sit inside the plan", bi.days.length === 2, String(bi.days.length));
+ok("most recent day first", bi.days[0].id === "upperA", bi.days[0].id);
+ok("day keeps its records", bi.days[0].recs.length === 2);
+
+/* stats inside a day only count that day's records */
+const dayStats = exerciseStats(bi.days[0].recs);
+ok("day stats are scoped to the day", dayStats.length === 1 && dayStats[0].name === "Bench");
+ok("day stats ignore other plans' sets of the same lift",
+   dayStats[0].count === 2 && dayStats[0].latest.w === 60, String(dayStats[0].latest.w));
+ok("unscoped stats still span everything", exerciseStats().find(m => m.name === "Bench").count === 3);
+
+const gv = draw("grouped progress", progList);
+ok("plan names are group headers", gv.includes("4-Day Upper/Lower") && gv.includes("My Split"));
+ok("day names are nested headers", gv.includes("Upper A") && gv.includes("Lower A"));
+ok("the active plan opens by default", /<details class="pgroup" open>/.test(gv));
+ok("other plans stay collapsed", (gv.match(/<details class="pgroup" >/g) || []).length === 2,
+   String((gv.match(/<details class="pgroup" >/g) || []).length));
+ok("every day starts collapsed", !/<details class="pday"[^>]*open/.test(gv));
+ok("the data panel is still there", gv.includes('id="expJson"'));
+state.log = []; state.plans = {}; state.planId = "builtin";
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");

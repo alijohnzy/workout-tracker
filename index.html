@@ -267,6 +267,28 @@
   .addshot{margin:14px 0 4px;font-size:13px;}
   .vid.pic .play{font-size:13px;}
 
+  /* ---------- progress grouping ---------- */
+  .pgroup{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px;}
+  .pgroup-head{padding:14px;background:var(--surface-hi);list-style:none;cursor:pointer;
+               display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .pgroup-head::-webkit-details-marker{display:none;}
+  .pgroup-name{font-size:14px;font-weight:800;}
+  .pgone{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--red);}
+  .pgroup-n{flex-shrink:0;font-size:11px;font-weight:700;color:var(--muted);}
+  .pgroup-head::after{content:"+";font-size:17px;font-weight:800;color:var(--muted);}
+  .pgroup[open] > .pgroup-head::after{content:"−";}
+  .pgroup-body{padding:10px;}
+  .pday{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:8px;}
+  .pday:last-child{margin-bottom:0;}
+  .pday-head{padding:12px 13px;background:var(--surface);list-style:none;cursor:pointer;
+             display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .pday-head::-webkit-details-marker{display:none;}
+  .pday-name{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;}
+  .pday-head::after{content:"+";font-size:16px;font-weight:800;color:var(--muted);}
+  .pday[open] > .pday-head::after{content:"−";}
+  .pday-body{padding:10px;border-top:1px solid var(--line);}
+  .pday-body .prog:last-child{margin-bottom:0;}
+
   /* ---------- progress ---------- */
   .prog{background:var(--surface);border:1px solid var(--line);border-radius:12px;
         padding:14px;margin-bottom:12px;}
@@ -619,7 +641,7 @@ async function initStore(){
 }
 
 let state = { v:2, view:"home", session:null, idx:0, units:"lb",
-              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false, pv:0 };
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false, pv:0, startedAt:null };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -717,6 +739,13 @@ function lastTime(name){
 function prevSet(name, n){
   const p = lastTime(name);
   return (p && p.sets[n-1]) || null;
+}
+
+const SESSION_MAX = 6 * 3600;   // beyond this it's an abandoned tab, not a workout
+function fmtDur(sec){
+  if(!sec || sec < 60) return sec ? "<1 min" : "";
+  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
+  return h ? h+"h "+String(m).padStart(2,"0")+"m" : m+" min";
 }
 
 const round1 = n => Math.round((Number(n)||0) * 10) / 10;
@@ -1515,13 +1544,14 @@ async function closeRestNote(){
    ============================================================ */
 function openSession(s){
   state.view="session"; state.session=s; state.idx=0; sheet=null; shotOpen=null;
+  state.startedAt = Date.now();   // resuming restarts it — we time the sitting, not the calendar gap
   save(); keepAwake(); render();
   /* render() is sync; redraw once the photos are in the cache */
   loadImgs(s).then(render);
 }
 function home(){
   state.view="home"; state.session=null; sheet=null;
-  state.pending=null; state.shareUrl=null;
+  state.pending=null; state.shareUrl=null; state.startedAt=null;
   stopRest(); save(); render();
 }
 function plansView(){ state.view="plans"; sheet=null; state.shareUrl=null; save(); render(); }
@@ -1578,7 +1608,7 @@ function discardSession(sid){
   if(!S) return;
   if(!confirm("Discard the unsaved sets for "+S.name+"?\n\nWorkouts already saved to history aren't touched.")) return;
   S.ex.forEach((_,i)=> delete state.live[lk(sid,i)]);
-  if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; }
+  if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; state.startedAt = null; }
   sheet = null; clearRest(); save(); render();
 }
 
@@ -1588,6 +1618,13 @@ function saveWorkout(){
   S.ex.forEach((e,i)=>{ const v=liveSets(s,i); if(v.length) entries[e.name]=v; });
   if(!Object.keys(entries).length){ home(); return; }
   const now = new Date().toISOString();
+  /* Seconds for this sitting. Anything past SESSION_MAX means the tab was left
+     open rather than the workout actually running that long, so it's dropped
+     instead of recorded as a lie. Records saved before this existed have no
+     `dur` at all, and simply don't show one. */
+  const dur = state.startedAt
+    ? (t => t > 0 && t <= SESSION_MAX ? t : null)(Math.round((Date.now() - state.startedAt) / 1000))
+    : null;
   state.log.push({
     id: T.today()+"-"+s+"-"+now.slice(11,19).replace(/:/g,""),
     date: now,
@@ -1597,10 +1634,12 @@ function saveWorkout(){
     planId: state.planId,
     kind: S.kind,           // carried, because the plan can be deleted later
                             // and history still has to render
+    ...(dur !== null ? { dur } : {}),
     entries
   });
   S.ex.forEach((_,i)=> delete state.live[lk(s,i)]);
   clearRest();
+  state.startedAt = null;
   state.view="home"; state.session=null; save(); render();
 }
 
@@ -1925,7 +1964,8 @@ function histList(){
     const rows = Object.entries(rec.entries).map(([n,sets])=>
       `<div class="srow"><span class="nm">${esc(n)}</span><span class="vv">${esc(setStr(sets))}</span></div>`).join("");
     return `<details class="hist-card"><summary>
-        <div><div class="hist-name">${esc(rec.name)}</div><div class="hist-date">${T.fmtDay(recDay(rec))}</div></div>
+        <div><div class="hist-name">${esc(rec.name)}</div>
+          <div class="hist-date">${T.fmtDay(recDay(rec))}${rec.dur ? " · "+fmtDur(rec.dur) : ""}</div></div>
         <div class="hist-vol">${volume(rec.entries).toLocaleString()} ${state.units}<br>total volume</div>
       </summary>${rows}</details>`;
   }).join("");
@@ -1936,9 +1976,9 @@ function histList(){
    the same reason lastTime() matches on name: renaming a lift starts a fresh
    line, moving it between plans doesn't. Entries can arrive from an imported
    file, so nothing in here trusts its shape. */
-function exerciseStats(){
+function exerciseStats(recs){
   const map = {};
-  state.log.forEach(rec=>{
+  (recs || state.log).forEach(rec=>{
     const entries = rec && rec.entries;
     if(!entries || typeof entries !== "object") return;
     Object.keys(entries).forEach(name=>{
@@ -1973,11 +2013,12 @@ function exerciseStats(){
   }).sort((a,b)=> a.lastDay < b.lastDay ? 1 : a.lastDay > b.lastDay ? -1 : 0);
 }
 
-function progList(){
-  const stats = exerciseStats();
-  if(!stats.length) return `<div class="empty">Nothing to compare yet.</div>` + dataPanel();
+/* the per-exercise cards for one bucket of records */
+function progCards(recs){
+  const stats = exerciseStats(recs);
+  if(!stats.length) return `<div class="empty">Nothing logged here yet.</div>`;
 
-  const cards = stats.map(m=>{
+  return stats.map(m=>{
     const val  = t => m.byW ? t.w : t.r;
     const unit = m.byW ? state.units : "reps";
     const series = m.sessions.slice(-12);
@@ -2008,8 +2049,61 @@ function progList(){
         avg ${m.byW ? round1(m.avgW)+" "+esc(state.units)+" × " : ""}${round1(m.avgR)} reps</div>
     </div>`;
   }).join("");
+}
 
-  return cards + dataPanel();
+/* History grouped the way you actually think about it: plan, then the day
+   inside it. Buckets come from the RECORDS (planId + session), not from the
+   current plans, so days from a plan you've since deleted still show up. */
+function progGroups(){
+  const plans = new Map();
+  state.log.forEach(r=>{
+    if(!r || !r.entries || typeof r.entries !== "object") return;
+    const pid = r.planId || "builtin", sid = r.session || "?";
+    if(!plans.has(pid)) plans.set(pid, { id:pid, days:new Map(), n:0, last:"" });
+    const P = plans.get(pid);
+    if(!P.days.has(sid)) P.days.set(sid, { id:sid, name:r.name || sid, recs:[], last:"" });
+    const D = P.days.get(sid);
+    D.recs.push(r);
+    if(r.name) D.name = r.name;
+    const day = recDay(r);
+    if(day > D.last) D.last = day;
+    if(day > P.last) P.last = day;
+    P.n++;
+  });
+  return [...plans.values()]
+    .sort((a,b)=> a.last < b.last ? 1 : a.last > b.last ? -1 : 0)
+    .map(P=>{
+      const live = planById(P.id);
+      return { ...P, name: live ? live.name : "Deleted plan", gone: !live,
+               days: [...P.days.values()].sort((a,b)=> a.last < b.last ? 1 : a.last > b.last ? -1 : 0) };
+    });
+}
+
+function progList(){
+  const groups = progGroups();
+  if(!groups.length) return `<div class="empty">Nothing to compare yet.</div>` + dataPanel();
+
+  /* the active plan opens, its days stay shut — the whole point is that this
+     used to be one very long list */
+  const html = groups.map(P=>`
+    <details class="pgroup" ${P.id===state.planId?"open":""}>
+      <summary class="pgroup-head">
+        <span class="pgroup-name">${esc(P.name)}${P.gone?` <span class="pgone">deleted</span>`:""}</span>
+        <span class="pgroup-n">${P.n} session${P.n>1?"s":""}</span>
+      </summary>
+      <div class="pgroup-body">
+        ${P.days.map(D=>`
+          <details class="pday">
+            <summary class="pday-head">
+              <span class="pday-name">${esc(D.name)}</span>
+              <span class="pgroup-n">${D.recs.length}× · ${T.fmtDay(D.last)}</span>
+            </summary>
+            <div class="pday-body">${progCards(D.recs)}</div>
+          </details>`).join("")}
+      </div>
+    </details>`).join("");
+
+  return html + dataPanel();
 }
 
 function histCal(){
@@ -2045,7 +2139,8 @@ function histCal(){
     detail = byDay[state.selDay].map(rec=>{
       const rows = Object.entries(rec.entries).map(([n,sets])=>
         `<div class="srow"><span class="nm">${esc(n)}</span><span class="vv">${esc(setStr(sets))}</span></div>`).join("");
-      return `<div class="daycard"><h4>${esc(rec.name)} · ${T.fmtDay(recDay(rec))}</h4>${rows}</div>`;
+      return `<div class="daycard"><h4>${esc(rec.name)} · ${T.fmtDay(recDay(rec))}${
+        rec.dur ? " · "+fmtDur(rec.dur) : ""}</h4>${rows}</div>`;
     }).join("");
   }
 

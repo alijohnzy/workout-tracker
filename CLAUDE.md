@@ -80,6 +80,10 @@ persisted whole to the single `wk-v2` key.
   Adding or removing a step means updating `go()`'s max, the step-dot count, and the counter label together.
 - `state.draft` is the plan being edited, persisted so a half-written plan survives a reload the same way
   `state.live` protects a half-finished workout.
+- `state.startedAt` stamps when a session was opened; `saveWorkout()` turns it into `dur` (seconds) on the
+  record. Resuming restarts it, so it times the *sitting*, not the calendar gap. Anything over
+  `SESSION_MAX` is a tab left open, not a workout, and is dropped rather than recorded — and records
+  saved before this existed simply have no `dur`, so every reader must treat it as optional.
 - `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
   It is persisted; `timer.id` is only the repaint handle and stays a transient global, as does `sheet`.
 - `state.notify` is the opt-in for rest notifications.
@@ -173,6 +177,12 @@ An abandoned session can be dropped with `discardSession()` — without it the r
 and holds JSON import/export, `.ics` export and the history wipe, because they're rare and two of them
 are destructive; don't promote any of them back out to a loose button), plus `viewPlans` (switch / create /
 share / duplicate / delete), `viewEditor` (edit `state.draft`) and `viewImport` (preview a shared link).
+The Progress tab groups **plan → day → exercise** as nested `<details>`; the active plan opens and days
+stay shut, because flat it was unreadably long. `progGroups()` buckets by the *records'* `planId` and
+`session`, not by the current plans, so days from a deleted plan still appear (labelled). `exerciseStats()`
+takes an optional record list so a day's cards count only that day's sessions — note this deliberately
+narrows the cross-plan view you get when it's called with no argument.
+
 `exerciseStats()` aggregates history by exercise **name**, for the same reason `lastTime()` does — a lift
 keeps its line when it moves between plans, and renaming it starts a fresh one. Its bar chart is indexed
 to each lift's own min/max rather than to zero, because working weights cluster near the top and a real
