@@ -41,7 +41,8 @@ nothing uploaded. A 20-exercise plan with every coaching field filled comes to a
 it pastes into any chat. Whoever opens it gets a preview and chooses whether to save it; it's added
 alongside their plans and never touches their history.
 
-**History.** Calendar, list and progress views, with how long each session took. Progress is grouped by
+**History.** Calendar, list and progress views, with how long each session took. Forgot to hit save and
+came back the next day? It asks what time you actually finished rather than logging a nine-hour workout. Progress is grouped by
 plan, then by day, so it collapses to a few rows instead of one endless list. Open a day and every lift in
 it gets a card: times trained, best
 set, average weight and reps, how far you've come from your first session, and a bar chart of your top

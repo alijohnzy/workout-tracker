@@ -81,9 +81,14 @@ persisted whole to the single `wk-v2` key.
 - `state.draft` is the plan being edited, persisted so a half-written plan survives a reload the same way
   `state.live` protects a half-finished workout.
 - `state.startedAt` stamps when a session was opened; `saveWorkout()` turns it into `dur` (seconds) on the
-  record. Resuming restarts it, so it times the *sitting*, not the calendar gap. Anything over
-  `SESSION_MAX` is a tab left open, not a workout, and is dropped rather than recorded — and records
-  saved before this existed simply have no `dur`, so every reader must treat it as optional.
+  record. Resuming restarts it, so it times the *sitting*, not the calendar gap. Past `SESSION_MAX` the
+  gap is a tab left open rather than a workout, so the save page asks for a finish time instead of
+  guessing (`isStale()` → an `<input type="time">`, converted by `pickedDur()` and capped at
+  `MANUAL_MAX`). Two traps there: the input has minute resolution, so `pickedDur()` zeroes the start's
+  seconds or a nominal hour reads back as 59 min; and a time earlier than the start rolls to the next
+  day, because finishing after midnight is the ordinary case for a session you're only now saving.
+  `finishValue()` exists so the view and `saveWorkout()` can't disagree about the default. Records saved
+  before any of this existed have no `dur`, so every reader must treat it as optional.
 - `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
   It is persisted; `timer.id` is only the repaint handle and stays a transient global, as does `sheet`.
 - `state.notify` is the opt-in for rest notifications.

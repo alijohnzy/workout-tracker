@@ -267,6 +267,16 @@
   .addshot{margin:14px 0 4px;font-size:13px;}
   .vid.pic .play{font-size:13px;}
 
+  .finish{margin-top:16px;padding:14px;background:var(--surface);border:1px solid var(--gold);
+          border-radius:12px;}
+  .finish .eyebrow{color:var(--gold);margin-bottom:10px;}
+  .finish-row{display:flex;align-items:center;gap:12px;}
+  .finish-lab{font-size:14px;font-weight:700;}
+  .finish input{flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);
+                border-radius:10px;padding:12px;font-size:17px;font-weight:800;color:var(--text);
+                font-family:inherit;font-variant-numeric:tabular-nums;}
+  .finish-note{margin-top:10px;font-size:12px;color:var(--muted);}
+
   /* ---------- progress grouping ---------- */
   .pgroup{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px;}
   .pgroup-head{padding:14px;background:var(--surface-hi);list-style:none;cursor:pointer;
@@ -741,7 +751,48 @@ function prevSet(name, n){
   return (p && p.sets[n-1]) || null;
 }
 
-const SESSION_MAX = 6 * 3600;   // beyond this it's an abandoned tab, not a workout
+/* Past this we stop guessing and ask, because the gap is a tab left open
+   rather than a workout that actually ran that long. */
+const SESSION_MAX = 6 * 3600;
+/* ...and however late you answer, a hand-entered session is capped here. */
+const MANUAL_MAX = 2 * 3600;
+
+const openSecs = () => state.startedAt ? Math.round((Date.now() - state.startedAt) / 1000) : 0;
+const isStale  = () => openSecs() > SESSION_MAX;
+
+const hhmm = ms => { const d = new Date(ms);
+  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+
+/* What the picker will save. finishPick is null until you touch it, so the
+   view and saveWorkout() agree on the default rather than showing one number
+   and storing another. */
+const finishValue = () => finishPick !== null ? finishPick : hhmm(state.startedAt + 3600000);
+
+/* "HH:MM" read against the start date, rolling into the next day when it reads
+   earlier than the start — finishing after midnight is the ordinary case for a
+   session you're only now getting round to saving. */
+function pickedDur(t){
+  if(!state.startedAt || !/^\d{1,2}:\d{2}$/.test(t || "")) return null;
+  const raw = new Date(state.startedAt), p = t.split(":").map(Number);
+  /* the input only has minute resolution, so drop the start's seconds too —
+     otherwise a nominal one-hour default reads back as 59 min */
+  const st = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate(),
+                      raw.getHours(), raw.getMinutes(), 0, 0);
+  const fin = new Date(st.getFullYear(), st.getMonth(), st.getDate(), p[0], p[1], 0, 0);
+  let sec = Math.round((fin - st) / 1000);
+  if(sec < 0) sec += 86400;
+  return sec < 60 ? null : Math.min(sec, MANUAL_MAX);
+}
+
+/* Recomputed as you type, without a re-render — replacing #app mid-edit
+   would close the native time picker. */
+function finishNote(){
+  const d = pickedDur(finishValue());
+  if(d === null) return "No length will be saved.";
+  const capped = pickedDur(finishValue()) === MANUAL_MAX;
+  return "That's " + fmtDur(d) + (capped ? " — capped at 2 hours" : "");
+}
+
 function fmtDur(sec){
   if(!sec || sec < 60) return sec ? "<1 min" : "";
   const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
@@ -1004,6 +1055,7 @@ const IMG_MAX = 900;         // px on the long edge
 const IMG_Q = 0.7;
 const IMG_CAP = 2e6;         // refuse anything absurd arriving from an import
 let shotOpen = null;         // which photo is enlarged; transient like `sheet`
+let finishPick = null;       // "HH:MM" typed on the save page for a stale session
 
 const imgSearch = n =>
   "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(n + " exercise proper form");
@@ -1544,6 +1596,7 @@ async function closeRestNote(){
    ============================================================ */
 function openSession(s){
   state.view="session"; state.session=s; state.idx=0; sheet=null; shotOpen=null;
+  finishPick = null;
   state.startedAt = Date.now();   // resuming restarts it — we time the sitting, not the calendar gap
   save(); keepAwake(); render();
   /* render() is sync; redraw once the photos are in the cache */
@@ -1551,7 +1604,7 @@ function openSession(s){
 }
 function home(){
   state.view="home"; state.session=null; sheet=null;
-  state.pending=null; state.shareUrl=null; state.startedAt=null;
+  state.pending=null; state.shareUrl=null; state.startedAt=null; finishPick=null;
   stopRest(); save(); render();
 }
 function plansView(){ state.view="plans"; sheet=null; state.shareUrl=null; save(); render(); }
@@ -1608,7 +1661,7 @@ function discardSession(sid){
   if(!S) return;
   if(!confirm("Discard the unsaved sets for "+S.name+"?\n\nWorkouts already saved to history aren't touched.")) return;
   S.ex.forEach((_,i)=> delete state.live[lk(sid,i)]);
-  if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; state.startedAt = null; }
+  if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; state.startedAt = null; finishPick = null; }
   sheet = null; clearRest(); save(); render();
 }
 
@@ -1618,13 +1671,14 @@ function saveWorkout(){
   S.ex.forEach((e,i)=>{ const v=liveSets(s,i); if(v.length) entries[e.name]=v; });
   if(!Object.keys(entries).length){ home(); return; }
   const now = new Date().toISOString();
-  /* Seconds for this sitting. Anything past SESSION_MAX means the tab was left
-     open rather than the workout actually running that long, so it's dropped
-     instead of recorded as a lie. Records saved before this existed have no
-     `dur` at all, and simply don't show one. */
-  const dur = state.startedAt
-    ? (t => t > 0 && t <= SESSION_MAX ? t : null)(Math.round((Date.now() - state.startedAt) / 1000))
-    : null;
+  /* Seconds for this sitting. A plausible span is just measured; a stale one
+     uses the finish time the save page asked for. Records saved before any of
+     this existed have no `dur` at all, so readers must treat it as optional. */
+  const el = openSecs();
+  const dur = !state.startedAt ? null
+            : el > SESSION_MAX ? pickedDur(finishValue())
+            : el > 0           ? el
+            : null;
   state.log.push({
     id: T.today()+"-"+s+"-"+now.slice(11,19).replace(/:/g,""),
     date: now,
@@ -1639,7 +1693,7 @@ function saveWorkout(){
   });
   S.ex.forEach((_,i)=> delete state.live[lk(s,i)]);
   clearRest();
-  state.startedAt = null;
+  state.startedAt = null; finishPick = null;
   state.view="home"; state.session=null; save(); render();
 }
 
@@ -2212,6 +2266,14 @@ function viewSession(){
         <div class="done-sub">${entries.length ? volume(obj).toLocaleString()+" "+state.units+" total volume" : "Nothing logged"}</div>
       </div>
       <div class="summary">${rows}</div>
+      ${isStale() ? `<div class="finish">
+        <div class="eyebrow">Left open since ${esc(hhmm(state.startedAt))} on ${esc(T.fmtDay(T.dayOf(new Date(state.startedAt).toISOString())))}</div>
+        <div class="finish-row">
+          <span class="finish-lab">Finished at</span>
+          <input type="time" id="finTime" value="${escA(finishValue())}">
+        </div>
+        <div class="finish-note" id="finNote">${esc(finishNote())}</div>
+      </div>` : ""}
       <button class="save-btn" id="saveW">Save workout to history</button>`;
     nav = `<button class="prev" id="prev">← Back</button><button class="next" id="back">Exit without saving</button>`;
 
@@ -2343,6 +2405,12 @@ function wire(){
     const arr = liveSets(state.session, state.idx-1);
     if(arr[sheet.set-1]) clearSet(sheet.set); else { sheet=null; render(); }
   });
+  const finIn = document.getElementById("finTime");
+  if(finIn) finIn.oninput = ()=>{
+    finishPick = finIn.value;
+    const note = document.getElementById("finNote");
+    if(note) note.textContent = finishNote();
+  };
   on("saveW", saveWorkout);
   on("tabCal",  ()=>{ state.tab="cal";  save(); render(); });
   on("tabList", ()=>{ state.tab="list"; state.selDay=null; save(); render(); });

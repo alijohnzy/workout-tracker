@@ -461,14 +461,66 @@ ok("the record carries a duration", state.log[0].dur === 47*60, String(state.log
 ok("saving clears the clock", state.startedAt === null);
 ok("history shows the length", histList().includes("47 min"));
 
-/* an abandoned tab must not be recorded as a marathon */
+/* a session left open overnight asks instead of guessing */
+state.log = []; state.live = {};
+NOW.v = 1800000000000;
+openSession("upperA");
+sheet = { set:1, w:20, r:10 }; state.idx = 1; logSet(); clearRest();
+const startedAt = state.startedAt;
+NOW.v += 9 * 3600 * 1000;                      // left open overnight
+ok("a long-open session is flagged stale", isStale() === true);
+state.idx = sess("upperA").ex.length + 2;
+const savePage = viewSession();
+ok("the save page asks for a finish time", savePage.includes('id="finTime"'));
+ok("it says when the session was opened", savePage.includes(hhmm(startedAt)));
+ok("it defaults to an hour after the start",
+   savePage.includes('value="' + hhmm(startedAt + 3600000) + '"'));
+ok("and shows what that would save", savePage.includes("That's 1h 00m"));
+
+/* the picker converts a clock time into a length */
+finishPick = hhmm(startedAt + 45 * 60000);
+ok("seconds on the start do not skew the maths",
+   (()=>{ const keep = state.startedAt; state.startedAt = keep + 44000;
+          finishPick = hhmm(keep + 3600000);
+          const d = pickedDur(finishValue()); state.startedAt = keep; return d === 3600; })(),
+   "");
+finishPick = hhmm(startedAt + 45 * 60000);
+ok("a picked time becomes a duration", pickedDur(finishValue()) === 45 * 60,
+   String(pickedDur(finishValue())));
+finishPick = hhmm(startedAt + 5 * 3600000);
+ok("anything past two hours is capped", pickedDur(finishValue()) === MANUAL_MAX,
+   String(pickedDur(finishValue())));
+ok("the note says it was capped", finishNote().includes("capped"));
+finishPick = hhmm(startedAt);
+ok("a finish equal to the start saves nothing", pickedDur(finishValue()) === null);
+ok("the note says so", finishNote().includes("No length"));
+finishPick = "";
+ok("clearing the field saves nothing", pickedDur(finishValue()) === null);
+
+/* a session that ran past midnight still resolves forwards */
+const lateStart = new Date(2026, 6, 20, 23, 30).getTime();
+const realStart = state.startedAt;
+state.startedAt = lateStart; finishPick = "00:15";
+ok("finishing after midnight rolls to the next day", pickedDur(finishValue()) === 45 * 60,
+   String(pickedDur(finishValue())));
+state.startedAt = realStart;
+
+finishPick = hhmm(startedAt + 52 * 60000);
+saveWorkout();
+ok("the picked length is what gets stored", state.log[0].dur === 52 * 60, String(state.log[0].dur));
+ok("saving clears the picker", finishPick === null);
+ok("history shows the hand-entered length", histList().includes("52 min"));
+
+/* a normal-length session never sees the picker */
 state.log = []; state.live = {};
 openSession("upperA");
 sheet = { set:1, w:20, r:10 }; state.idx = 1; logSet(); clearRest();
-NOW.v += 9 * 3600 * 1000;                      // left open overnight
+NOW.v += 40 * 60 * 1000;
+state.idx = sess("upperA").ex.length + 2;
+ok("a normal session is not stale", isStale() === false);
+ok("no picker on a normal save page", !viewSession().includes('id="finTime"'));
 saveWorkout();
-ok("an implausible span is dropped, not stored", state.log[0].dur === undefined, String(state.log[0].dur));
-ok("history simply omits it", !histList().includes("h 0"));
+ok("a normal session is just measured", state.log[0].dur === 40 * 60, String(state.log[0].dur));
 
 /* records saved before this existed have no duration and must still render */
 state.log = [{ id:"old", date:"2026-07-01T10:00:00Z", day:"2026-07-01", session:"upperA",
