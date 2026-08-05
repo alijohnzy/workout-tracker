@@ -22,7 +22,8 @@ Open it once while online so the offline cache fills. After that it works with t
 **Train.** The day after your last one is marked *Up next*. Work through a warm-up, one exercise per
 screen, then a cool-down. Abandoned a session? Discard it from the home screen in one tap. Each exercise shows its
 target sets and reps, what doing it right feels like, the common way to get it wrong, and a coaching cue.
-Log a set and a rest timer starts on its own. Each exercise also links straight to a Google Images
+Log a set and a rest timer starts on its own. At the bottom of each exercise you can optionally tap how
+it felt — rough, ok or strong — and that comes back as a reminder the next time the lift comes round. Each exercise also links straight to a Google Images
 search, and you can save one photo per lift — from your gallery or the camera — which is stored on the
 device and shown as a thumbnail next session. Handy for photographing a machine's actual seat and pin
 setting, and it works with no signal.
@@ -41,7 +42,7 @@ nothing uploaded. A 20-exercise plan with every coaching field filled comes to a
 it pastes into any chat. Whoever opens it gets a preview and chooses whether to save it; it's added
 alongside their plans and never touches their history.
 
-**History.** Calendar, list and progress views, with how long each session took. Forgot to hit save and
+**History.** Calendar, list and progress views, with how long each session took and how each lift felt. Forgot to hit save and
 came back the next day? It asks what time you actually finished rather than logging a nine-hour workout. Progress is grouped by
 plan, then by day, so it collapses to a few rows instead of one endless list. Open a day and every lift in
 it gets a card: times trained, best

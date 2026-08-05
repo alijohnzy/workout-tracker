@@ -89,6 +89,10 @@ persisted whole to the single `wk-v2` key.
   day, because finishing after midnight is the ordinary case for a session you're only now saving.
   `finishValue()` exists so the view and `saveWorkout()` can't disagree about the default. Records saved
   before any of this existed have no `dur`, so every reader must treat it as optional.
+- `state.feel` is a scratchpad of optional per-exercise ratings (1 rough / 2 ok / 3 strong), keyed like
+  `state.live`. `saveWorkout()` moves it onto the record as `feel:{exerciseName:n}` — by **name**, like
+  `entries`, so `lastFeel()` can surface it next time the lift comes round. Omitted entirely when
+  nothing was rated, so it stays optional for every reader.
 - `state.rest` is the running rest timer, stored as a **deadline** (`endsAt`) plus `note`/`logged`/`buzzed`.
   It is persisted; `timer.id` is only the repaint handle and stays a transient global, as does `sheet`.
 - `state.notify` is the opt-in for rest notifications.
@@ -161,6 +165,9 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
   the clock, and `visibilitychange` repaints immediately on return rather than waiting for a throttled
   tick. Completion is signalled once, through whichever channel is live at the moment it's noticed:
   `navigator.vibrate()` if the page is visible, a notification if it isn't.
+- The three faces are drawn as inline SVG rather than emoji, so red/amber/green are the app's own palette
+  and render identically everywhere. `feelOf()` whitelists the value because records also arrive from
+  imported files; anything else renders as nothing rather than throwing.
 - The set sheet opens set *n* on what set *n* was **last session** (`prevSet()`), not on today's
   previous set — deliberately, so last week's figure is visible every time even after you've moved up
   today. It only falls back to today's last set when history has fewer sets than you're doing now.

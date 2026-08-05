@@ -573,6 +573,72 @@ ok("every day starts collapsed", !/<details class="pday"[^>]*open/.test(gv));
 ok("the data panel is still there", gv.includes('id="expJson"'));
 state.log = []; state.plans = {}; state.planId = "builtin";
 
+/* ---------- how did that feel ---------- */
+ok("three levels, red / amber / green", FEELS.length === 3 &&
+   FEELS.map(f=>f.cls).join(",") === "bad,mid,good");
+ok("levels are whitelisted", !!feelOf(1) && !!feelOf(3) && !feelOf(0) && !feelOf(4) && !feelOf("x"));
+ok("a hostile value renders nothing", feelTag("<img src=x>") === "" && feelTag(99) === "");
+ok("faces are drawn, not emoji", faceSvg(FEELS[0]).includes("<svg") && faceSvg(FEELS[0]).includes("<path"));
+ok("sad and happy mouths differ", FEELS[0].mouth !== FEELS[2].mouth);
+
+state.plans = {}; state.planId = "builtin"; state.live = {}; state.feel = {};
+state.log = []; sheet = null; NOW.v = 1800000000000;
+openSession("upperA");
+state.idx = 2;                                   // Lat Pulldown
+const exName = sess("upperA").ex[1].name;
+
+const before = viewSession();
+ok("the picker sits on the exercise page", before.includes('data-feel="1"') && before.includes('data-feel="3"'));
+ok("nothing is preselected", !before.includes('class="feel-btn bad on"'));
+ok("no last-time hint without history", !before.includes("Last time <span"));
+
+setFeel(1, 3);
+ok("tapping records the level", liveFeel("upperA", 1) === 3);
+ok("the chosen face is marked", viewSession().includes('feel-btn good on'));
+setFeel(1, 3);
+ok("tapping the same face clears it", liveFeel("upperA", 1) === null);
+setFeel(1, 1);
+setFeel(1, 2);
+ok("tapping another face switches", liveFeel("upperA", 1) === 2);
+
+sheet = { set:1, w:50, r:10 }; logSet(); clearRest();
+saveWorkout();
+const rec = state.log[0];
+ok("the rating lands on the record", rec.feel && rec.feel[exName] === 2, JSON.stringify(rec.feel));
+ok("the scratchpad is cleared on save", Object.keys(state.feel).length === 0);
+ok("an unrated session stores no feel at all",
+   (()=>{ state.live={}; state.feel={}; openSession("upperA"); state.idx=2;
+          sheet={set:1,w:10,r:10}; logSet(); clearRest(); saveWorkout();
+          return state.log[1].feel === undefined; })());
+
+/* it comes back next time you do the lift */
+ok("lastFeel finds the most recent rating", lastFeel(exName) === 2, String(lastFeel(exName)));
+ok("lastFeel is null for an unrated lift", lastFeel("Never Rated") === null);
+state.live = {}; state.feel = {};
+openSession("upperA"); state.idx = 2;
+const again = viewSession();
+ok("the exercise page shows last time's level", again.includes("Last time") && again.includes("feel-was"));
+ok("but does not preselect it", !again.includes("feel-btn mid on"));
+
+/* history shows it like any other data */
+state.tab = "list";
+const lv = histList();
+ok("the list view marks the rating", lv.includes("feel-tag mid"));
+state.selDay = recDay(state.log[0]); state.calOff = 0;
+ok("the calendar detail marks it too", histCal().includes("feel-tag"));
+state.selDay = null;
+ok("the progress card carries the latest rating", progList().includes("feel-tag"));
+
+/* an older rating must not leak onto an unrated lift */
+ok("unrated rows stay clean",
+   !histList().includes('feel-tag" '), "");
+
+/* ratings survive a discard without touching anything else */
+state.live = {}; state.feel = {};
+openSession("upperA"); setFeel(1, 1);
+ok("discard clears the rating", (discardSession("upperA"), Object.keys(state.feel).length === 0));
+state.log = []; state.live = {}; state.feel = {};
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");

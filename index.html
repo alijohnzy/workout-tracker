@@ -254,6 +254,32 @@
         font-size:14px;font-weight:700;text-align:left;color:var(--gold);}
   .dbtn:active{background:var(--surface-hi);}
 
+  /* ---------- how did that feel ---------- */
+  .feel{margin-top:20px;padding:14px;background:var(--surface);border:1px solid var(--line);
+        border-radius:12px;}
+  .feel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .feel-was{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--muted);}
+  .feel-row{display:flex;gap:8px;}
+  .feel-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 4px;
+            border-radius:10px;background:var(--ink);border:1px solid var(--line);
+            font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);}
+  .feel-btn .face{opacity:.55;}
+  .feel-btn.on{color:var(--text);}
+  .feel-btn.on .face{opacity:1;}
+  .feel-btn.bad.on{border-color:var(--red);background:rgba(224,96,90,.12);}
+  .feel-btn.mid.on{border-color:var(--gold);background:rgba(224,176,72,.12);}
+  .feel-btn.good.on{border-color:var(--green);background:rgba(63,191,127,.12);}
+  .feel-btn.bad .face{color:var(--red);}
+  .feel-btn.mid .face{color:var(--gold);}
+  .feel-btn.good .face{color:var(--green);}
+  .feel-tag{display:inline-flex;vertical-align:-6px;margin-right:6px;}
+  .feel-tag .face{width:19px;height:19px;}
+  .feel-tag.bad{color:var(--red);}
+  .feel-tag.mid{color:var(--gold);}
+  .feel-tag.good{color:var(--green);}
+  .feel-was .feel-tag{margin-right:0;}
+  .feel-was .feel-tag .face{width:16px;height:16px;}
+
   /* ---------- exercise photo ---------- */
   .shots{margin:14px 0 4px;}
   .shot{display:block;width:100%;padding:0;border-radius:12px;overflow:hidden;
@@ -651,7 +677,7 @@ async function initStore(){
 }
 
 let state = { v:2, view:"home", session:null, idx:0, units:"lb",
-              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false, pv:0, startedAt:null };
+              live:{}, log:[], plans:{}, planId:"builtin", draft:null, rest:null, notify:false, pv:0, startedAt:null, feel:{} };
 let sheet = null;
 let writeChain = Promise.resolve();
 
@@ -682,6 +708,7 @@ async function load(){
 function migrate(){
   if(state.v === 2 && state.plans) return false;
   state.plans  = state.plans  || {};
+  state.feel   = state.feel   || {};
   state.planId = state.planId || "builtin";
   state.draft  = state.draft  || null;
 
@@ -740,6 +767,49 @@ function lastTime(name){
   for(let i=state.log.length-1;i>=0;i--){
     const sets = state.log[i].entries[name];
     if(sets && sets.length) return { date:state.log[i].date, sets };
+  }
+  return null;
+}
+
+/* How an exercise felt: optional, one of three, kept per exercise the same
+   way sets are. Drawn rather than emoji so the three read as red/amber/green
+   at a glance and match the palette. */
+const FEELS = [
+  { v:1, label:"Rough",  cls:"bad",  mouth:"M8 15.5 Q12 11.5 16 15.5" },
+  { v:2, label:"OK",     cls:"mid",  mouth:"M8.5 14 L15.5 14" },
+  { v:3, label:"Strong", cls:"good", mouth:"M8 12 Q12 16 16 12" }
+];
+/* whitelisted, because records arrive from imported files too */
+const feelOf = v => FEELS.find(f => f.v === Number(v)) || null;
+
+const faceSvg = f => `<svg class="face" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+  <circle cx="9" cy="9.8" r="1.25" fill="currentColor"/>
+  <circle cx="15" cy="9.8" r="1.25" fill="currentColor"/>
+  <path d="${f.mouth}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</svg>`;
+
+/* a small inline marker for history rows */
+const feelTag = v => { const f = feelOf(v);
+  return f ? `<span class="feel-tag ${f.cls}" title="${escA(f.label)}">${faceSvg(f)}</span>` : ""; };
+
+const feelKey = (s,i) => lk(s,i);
+const liveFeel = (s,i) => (state.feel || {})[feelKey(s,i)] || null;
+
+function setFeel(i, v){
+  const s = state.session;
+  state.feel = state.feel || {};
+  const k = feelKey(s,i);
+  if(state.feel[k] === v) delete state.feel[k];   // tapping the same face clears it
+  else state.feel[k] = v;
+  save(); render();
+}
+
+/* the rating from the last session that recorded one for this lift */
+function lastFeel(name){
+  for(let i=state.log.length-1; i>=0; i--){
+    const f = state.log[i].feel;
+    if(f && f[name] && feelOf(f[name])) return Number(f[name]);
   }
   return null;
 }
@@ -1660,15 +1730,18 @@ function discardSession(sid){
   const S = sess(sid);
   if(!S) return;
   if(!confirm("Discard the unsaved sets for "+S.name+"?\n\nWorkouts already saved to history aren't touched.")) return;
-  S.ex.forEach((_,i)=> delete state.live[lk(sid,i)]);
+  S.ex.forEach((_,i)=>{ delete state.live[lk(sid,i)]; delete (state.feel||{})[feelKey(sid,i)]; });
   if(state.session === sid){ state.session = null; state.idx = 0; state.view = "home"; state.startedAt = null; finishPick = null; }
   sheet = null; clearRest(); save(); render();
 }
 
 function saveWorkout(){
   const s=state.session, S=sess(s);
-  const entries={};
-  S.ex.forEach((e,i)=>{ const v=liveSets(s,i); if(v.length) entries[e.name]=v; });
+  const entries={}, feel={};
+  S.ex.forEach((e,i)=>{
+    const v=liveSets(s,i); if(v.length) entries[e.name]=v;
+    const f=liveFeel(s,i); if(f) feel[e.name]=f;
+  });
   if(!Object.keys(entries).length){ home(); return; }
   const now = new Date().toISOString();
   /* Seconds for this sitting. A plausible span is just measured; a stale one
@@ -1689,9 +1762,10 @@ function saveWorkout(){
     kind: S.kind,           // carried, because the plan can be deleted later
                             // and history still has to render
     ...(dur !== null ? { dur } : {}),
+    ...(Object.keys(feel).length ? { feel } : {}),
     entries
   });
-  S.ex.forEach((_,i)=> delete state.live[lk(s,i)]);
+  S.ex.forEach((_,i)=>{ delete state.live[lk(s,i)]; delete state.feel[feelKey(s,i)]; });
   clearRest();
   state.startedAt = null; finishPick = null;
   state.view="home"; state.session=null; save(); render();
@@ -2016,7 +2090,8 @@ function dataPanel(){
 function histList(){
   const cards = [...state.log].reverse().map(rec=>{
     const rows = Object.entries(rec.entries).map(([n,sets])=>
-      `<div class="srow"><span class="nm">${esc(n)}</span><span class="vv">${esc(setStr(sets))}</span></div>`).join("");
+      `<div class="srow"><span class="nm">${feelTag(rec.feel && rec.feel[n])}${esc(n)}</span>
+        <span class="vv">${esc(setStr(sets))}</span></div>`).join("");
     return `<details class="hist-card"><summary>
         <div><div class="hist-name">${esc(rec.name)}</div>
           <div class="hist-date">${T.fmtDay(recDay(rec))}${rec.dur ? " · "+fmtDur(rec.dur) : ""}</div></div>
@@ -2092,7 +2167,7 @@ function progCards(recs){
           pct !== null && d !== 0 ? " · "+(d>0?"+":"−")+Math.abs(pct)+"%" : ""}</span>`;
 
     return `<div class="prog">
-      <div class="prog-top"><div class="prog-name">${esc(m.name)}</div>${trend}</div>
+      <div class="prog-top"><div class="prog-name">${feelTag(lastFeel(m.name))}${esc(m.name)}</div>${trend}</div>
       <div class="prog-bars">${bars}</div>
       <div class="prog-grid">
         <div><b>${round1(val(m.first))}</b><span>first</span></div>
@@ -2192,7 +2267,8 @@ function histCal(){
   if(state.selDay && byDay[state.selDay]){
     detail = byDay[state.selDay].map(rec=>{
       const rows = Object.entries(rec.entries).map(([n,sets])=>
-        `<div class="srow"><span class="nm">${esc(n)}</span><span class="vv">${esc(setStr(sets))}</span></div>`).join("");
+        `<div class="srow"><span class="nm">${feelTag(rec.feel && rec.feel[n])}${esc(n)}</span>
+          <span class="vv">${esc(setStr(sets))}</span></div>`).join("");
       return `<div class="daycard"><h4>${esc(rec.name)} · ${T.fmtDay(recDay(rec))}${
         rec.dur ? " · "+fmtDur(rec.dur) : ""}</h4>${rows}</div>`;
     }).join("");
@@ -2353,7 +2429,8 @@ function viewSession(){
         <div class="check no"><span class="mark">✕</span><span>${esc(ex.no)}</span></div>
         <div class="cue"><b>Cue:</b> ${esc(ex.cue)}</div>
         ${ex.warn ? `<div class="warn">${esc(ex.warn)}</div>` : ""}
-      </div></details>`;
+      </div></details>
+      ${feelBlock(ex, i)}`;
     nav = `<button class="prev" id="prev">← Back</button>
            <button class="next ${allDone?"ready":""}" id="next">${state.idx===list.length?"Finish":"Next exercise →"}</button>`;
   }
@@ -2363,6 +2440,24 @@ function viewSession(){
       <div class="counter">${state.idx===0?"WARM-UP":state.idx===cool?"COOL-DOWN":state.idx===last?"COMPLETE":state.idx+" / "+list.length}</div>
     </div><div class="steps">${steps}</div></div>
     <div class="wrap">${body}<div class="nav">${nav}</div></div>`;
+}
+
+/* Optional on purpose — nothing is preselected and tapping the chosen face
+   again clears it, so skipping this costs nothing. */
+function feelBlock(ex, i){
+  const mine = liveFeel(state.session, i);
+  const was  = lastFeel(ex.name);
+  const wasF = feelOf(was);
+  return `<div class="feel">
+    <div class="feel-head">
+      <span class="eyebrow">How did that feel?</span>
+      ${wasF ? `<span class="feel-was">Last time <span class="feel-tag ${wasF.cls}">${faceSvg(wasF)}</span> ${esc(wasF.label)}</span>` : ""}
+    </div>
+    <div class="feel-row">${FEELS.map(f=>`
+      <button class="feel-btn ${f.cls} ${mine===f.v?"on":""}" data-feel="${f.v}">
+        ${faceSvg(f)}<span>${esc(f.label)}</span>
+      </button>`).join("")}</div>
+  </div>`;
 }
 
 function viewRest(){
@@ -2388,6 +2483,7 @@ function wire(){
   document.querySelectorAll("[data-rephoto]").forEach(b=> b.onclick=()=>pickPhoto(b.dataset.rephoto));
   document.querySelectorAll("[data-unshot]").forEach(b=> b.onclick=()=>dropPhoto(b.dataset.unshot));
   document.querySelectorAll("[data-set]").forEach(b=> b.onclick=()=>openSheet(+b.dataset.set));
+  document.querySelectorAll("[data-feel]").forEach(b=> b.onclick=()=>setFeel(state.idx-1, +b.dataset.feel));
 
   document.querySelectorAll("[data-adj]").forEach(b=> b.onclick=()=>{
     const [f,d]=b.dataset.adj.split(":");
