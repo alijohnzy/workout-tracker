@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A 4-day upper/lower workout tracker, built as an installable PWA. It is deployed to GitHub Pages
-(`https://gageracer.github.io/workout-tracker/`) and used on a phone, in a gym, usually with no signal.
+(`https://alijohnzy.github.io/workout-tracker/`) and used on a phone, in a gym, usually with no signal.
 
 There is **no build system, no package manager, and no dependencies**. The entire app is `index.html` —
 markup, CSS, and JavaScript inlined in one file. Everything else exists only to make it installable and

@@ -3,7 +3,7 @@
 An offline-first workout tracker you install on your phone. Built for a basement gym with no signal:
 one HTML file, no build step, no dependencies, no account, no server.
 
-**→ [gageracer.github.io/workout-tracker](https://gageracer.github.io/workout-tracker/)**
+**→ [alijohnzy.github.io/workout-tracker](https://alijohnzy.github.io/workout-tracker/)**
 
 ## Install it
 
