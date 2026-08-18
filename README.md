@@ -28,7 +28,9 @@ search, and you can save one photo per lift — from your gallery or the camera 
 device and shown as a thumbnail next session. Handy for photographing a machine's actual seat and pin
 setting, and it works with no signal.
 
-**Rest timer that doesn't lie.** The countdown is a deadline, not a tick count, so it stays accurate even
+**Rest timer that doesn't lie.** It sits as a toast along the bottom rather than taking over the screen,
+so you can read what's coming up, check a photo or flip through history while it runs — and only its own
+Done button dismisses it. The countdown is a deadline, not a tick count, so it stays accurate even
 when your phone throttles or freezes the page. Optional notifications (off by default) put the target
 time on your lock screen and buzz when the rest ends.
 

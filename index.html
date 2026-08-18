@@ -163,20 +163,28 @@
   .next{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);}
   .next.ready{background:var(--blue);border-color:var(--blue);color:#fff;}
 
-  /* rest overlay */
-  .rest{position:fixed;inset:0;z-index:50;background:var(--ink);display:flex;flex-direction:column;
-        align-items:center;justify-content:center;padding:24px;text-align:center;}
-  .rest-label{font-size:12px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);}
-  .rest-time{font-size:104px;font-weight:800;line-height:1;letter-spacing:-.04em;
-             font-variant-numeric:tabular-nums;margin:10px 0 6px;}
+  /* rest toast — pinned to the bottom, never covers the page permanently */
+  .rest{position:fixed;left:0;right:0;bottom:0;z-index:50;
+        display:flex;align-items:center;gap:12px;
+        padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+        background:var(--surface-hi);border-top:2px solid var(--blue);
+        box-shadow:0 -8px 24px rgba(0,0,0,.45);}
+  .rest.done{border-top-color:var(--green);}
+  .rest-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;}
+  .rest-time{flex-shrink:0;font-size:30px;font-weight:800;line-height:1;letter-spacing:-.03em;
+             font-variant-numeric:tabular-nums;min-width:74px;}
   .rest-time.over{color:var(--green);}
-  .rest-logged{font-size:15px;color:var(--gold);font-weight:700;margin-bottom:8px;}
-  .rest-next{font-size:15px;color:var(--muted);max-width:280px;}
-  .rest-btns{display:flex;gap:12px;margin-top:40px;width:100%;max-width:320px;}
-  .rest-btns button{flex:1;padding:16px;border-radius:12px;font-size:14px;font-weight:800;
-                    text-transform:uppercase;letter-spacing:.06em;}
-  .add{background:var(--surface);border:1px solid var(--line);}
+  .rest-txt{min-width:0;}
+  .rest-label{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+  .rest-next{font-size:12px;color:var(--text);line-height:1.35;margin-top:2px;
+             display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .rest-btns{flex-shrink:0;display:flex;gap:7px;}
+  .rest-btns button{padding:11px 12px;border-radius:10px;font-size:12px;font-weight:800;
+                    text-transform:uppercase;letter-spacing:.05em;}
+  .add{background:var(--ink);border:1px solid var(--line);color:var(--muted);}
   .skip{background:var(--blue);color:#fff;}
+  /* keeps the toast off whatever sits at the bottom of the page */
+  .rest-pad{height:88px;}
 
   /* finish + history */
   .done-screen{text-align:center;padding:44px 0 20px;}
@@ -1381,7 +1389,7 @@ async function sharePlan(id){
 function usePlan(id){
   if(!planById(id)) return;
   state.planId = id; state.view="home"; state.session=null; state.idx=0;
-  sheet=null; stopRest(); save(); render();
+  sheet=null; save(); render();   // a running rest survives a plan switch
 }
 
 const blankEx = () => ({ name:"", sets:3, reps:"8–12", lo:8, rest:90 });
@@ -1675,7 +1683,8 @@ function openSession(s){
 function home(){
   state.view="home"; state.session=null; sheet=null;
   state.pending=null; state.shareUrl=null; state.startedAt=null; finishPick=null;
-  stopRest(); save(); render();
+  save(); render();   // leaving the session does NOT end the rest
+
 }
 function plansView(){ state.view="plans"; sheet=null; state.shareUrl=null; save(); render(); }
 /* named histView, not history — a top-level `function history()` would
@@ -1807,13 +1816,15 @@ const escA = t => esc(t).replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 function render(){
   const app = document.getElementById("app");
-  if(state.rest){ if(timer.id===null) runRest(); app.innerHTML = viewRest(); wire(); return; }
-  app.innerHTML = state.view==="history" ? viewHistory()
+  /* the repaint interval outlives a reload, so restart it whenever a rest is
+     live but nothing is ticking */
+  if(state.rest && timer.id === null) runRest();
+  app.innerHTML = (state.view==="history" ? viewHistory()
                 : state.view==="session" ? viewSession()
                 : state.view==="plans"   ? viewPlans()
                 : state.view==="editor"  ? viewEditor()
                 : state.view==="import"  ? viewImport()
-                : viewHome();
+                : viewHome()) + viewRest();
   wire();
 }
 
@@ -2460,14 +2471,27 @@ function feelBlock(ex, i){
   </div>`;
 }
 
+/* A toast rather than a takeover, so the rest can run while you read what's
+   coming next. It rides along with every view and is dismissed only by its own
+   Done button — navigating anywhere leaves it alone. The spacer keeps it from
+   sitting on top of whatever is at the bottom of the page. */
 function viewRest(){
-  return `<div class="rest">
-    <div class="rest-label">Rest</div>
-    <div class="rest-time" id="restTime">${fmtT(restLeft())}</div>
-    ${state.rest.logged ? `<div class="rest-logged">Logged ${esc(state.rest.logged)}</div>` : ""}
-    <div class="rest-next">${esc(state.rest.note)}</div>
-    <div class="rest-btns"><button class="add" id="add30">+30 sec</button>
-      <button class="skip" id="skip">Done resting</button></div></div>`;
+  if(!state.rest) return "";
+  const over = restLeft() <= 0;
+  return `<div class="rest-pad"></div>
+    <div class="rest ${over?"done":""}">
+      <div class="rest-main">
+        <div class="rest-time ${over?"over":""}" id="restTime">${fmtT(restLeft())}</div>
+        <div class="rest-txt">
+          <div class="rest-label">${over ? "Rest done" : "Resting"}</div>
+          <div class="rest-next">${esc(state.rest.note)}</div>
+        </div>
+      </div>
+      <div class="rest-btns">
+        <button class="add" id="add30">+30s</button>
+        <button class="skip" id="skip">Done</button>
+      </div>
+    </div>`;
 }
 
 /* ============================================================

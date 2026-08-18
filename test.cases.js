@@ -639,6 +639,76 @@ openSession("upperA"); setFeel(1, 1);
 ok("discard clears the rating", (discardSession("upperA"), Object.keys(state.feel).length === 0));
 state.log = []; state.live = {}; state.feel = {};
 
+/* ---------- the rest is a toast, not a takeover ---------- */
+state.plans = {}; state.planId = "builtin"; state.live = {}; state.feel = {};
+state.log = []; sheet = null; state.notify = false; VIS.v = "visible";
+
+ok("no toast when nothing is resting", (state.rest = null, viewRest() === ""));
+
+openSession("upperA"); state.idx = 2;
+startRest(120, "Next: set 2 of 3 — Lat Pulldown", "50 lb × 10");
+const toast = viewRest();
+ok("the toast renders", toast.includes('class="rest ') || toast.includes('class="rest"'));
+ok("it shows the countdown", toast.includes('id="restTime"') && toast.includes("2:00"));
+ok("it says what's next", toast.includes("Next: set 2 of 3"));
+ok("it keeps its own buttons", toast.includes('id="add30"') && toast.includes('id="skip"'));
+ok("it reserves space so it covers nothing", toast.includes("rest-pad"));
+
+/* the underlying view is still drawn */
+render();
+ok("the exercise page renders underneath", APP.innerHTML.includes("Lat Pulldown"));
+ok("and the toast is appended to it", APP.innerHTML.includes('id="restTime"'));
+ok("the toast comes last in the markup",
+   APP.innerHTML.lastIndexOf('class="rest ') > APP.innerHTML.lastIndexOf('class="ex-name"'));
+
+/* nothing you navigate to may dismiss it */
+const stillResting = () => !!state.rest;
+histView();   ok("history keeps the rest running", stillResting());
+ok("the toast rides along on history", (render(), APP.innerHTML.includes('id="restTime"')));
+plansView();  ok("the plans view keeps it", stillResting());
+home();       ok("going home keeps it", stillResting());
+ok("the toast rides along on home", (render(), APP.innerHTML.includes('id="restTime"')));
+openSession("lowerA"); ok("opening another session keeps it", stillResting());
+state.idx = 1; go(1);
+ok("stepping through a session keeps it", stillResting());
+usePlan("builtin");    ok("switching plans keeps it", stillResting());
+
+/* logging a set restarts it rather than losing it */
+state.session = "upperA"; state.idx = 2; sheet = { set:2, w:55, r:9 };
+logSet();
+ok("logging another set restarts the rest", !!state.rest && restLeft() > 0);
+
+/* only its own button ends it */
+stopRest();
+ok("Done resting is what clears it", state.rest === null);
+ok("and the toast disappears with it", viewRest() === "");
+
+/* the two places that legitimately end the session still clear it */
+state.live = {}; state.feel = {};
+openSession("upperA"); state.idx = 2; sheet = { set:1, w:50, r:10 }; logSet();
+ok("a rest is running before saving", !!state.rest);
+state.idx = sess("upperA").ex.length + 2;
+saveWorkout();
+ok("saving the workout ends the rest", state.rest === null);
+
+state.live = {}; state.feel = {};
+openSession("upperA"); state.idx = 2; sheet = { set:1, w:50, r:10 }; logSet();
+discardSession("upperA");
+ok("discarding the session ends the rest", state.rest === null);
+
+/* overtime flips the toast's styling, and it stays put */
+state.live = {}; state.log = [];
+openSession("upperA"); state.idx = 2;
+const t2 = NOW.v;
+startRest(60, "Next up", "x");
+NOW.v = t2 + 90000;
+const late = viewRest();
+ok("an overrun toast marks itself done", late.includes('class="rest done"'));
+ok("and shows the overtime", late.includes("+0:30"), late.match(/id="restTime"[^>]*>([^<]*)/)[1]);
+ok("it is still dismissible only by its button", late.includes('id="skip"'));
+clearRest();
+state.log = []; state.live = {}; state.feel = {};
+
 console.log(out.join("\n"));
 const fails = out.filter(l => l.startsWith("  FAIL")).length;
 console.log("\n  " + (out.length - fails) + "/" + out.length + " passed");

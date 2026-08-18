@@ -22,7 +22,7 @@ const g = {
   TextEncoder, TextDecoder, CompressionStream, DecompressionStream, Response,
   btoa, atob, JSON, Math, Object, Array, String, Number, Set, Map, RegExp,
   Error, URL, Blob, Intl, isNaN, parseInt, parseFloat, encodeURIComponent,
-  decodeURIComponent, Promise, NOW, VIS, NOTES, FAILED,
+  decodeURIComponent, Promise, NOW, VIS, NOTES, FAILED, APP: app,
   document: { addEventListener(){}, getElementById: id => id === "app" ? app : el(),
               querySelectorAll: () => [], createElement: () => el(),
               body: { appendChild(){} } },

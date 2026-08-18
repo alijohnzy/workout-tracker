@@ -155,8 +155,14 @@ then `wire()` re-attaches every handler by id/`data-*` attribute. Consequences t
 - Any new interactive element needs a matching line in `wire()`, or it will be dead.
 - All user-supplied and program text must go through `esc()` — and **`escA()` inside an attribute**, since
   `esc()` leaves quotes intact and plan text is now user-authored and arrives from other people's phones.
-- An active rest timer short-circuits `render()` and takes over the whole screen (`viewRest()`), which is
-  why `render()` restarts the repaint interval itself when `state.rest` outlives a reload.
+- `viewRest()` is a **bottom toast appended to every view**, not a takeover — you need to read what's
+  coming up while the clock runs. It ships a `.rest-pad` spacer so it never permanently covers whatever
+  sits at the bottom of the page. `render()` restarts the repaint interval itself when `state.rest`
+  outlives a reload.
+- **Only the toast's own Done button clears a rest.** Navigating — home, history, plans, another session,
+  even switching plans — deliberately leaves it running, so don't reintroduce `stopRest()` into those
+  paths. The two exceptions are `saveWorkout()` and `discardSession()`, where the session the rest
+  belonged to is over.
 - `paintRest()` mutates the countdown text directly each second instead of re-rendering — a full re-render
   every second would drop taps mid-set.
 - **The rest countdown is a deadline, never a tick count.** A hidden page has its timers throttled to
